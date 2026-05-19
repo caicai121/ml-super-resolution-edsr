@@ -73,3 +73,34 @@ Expected output includes:
 - `CUDA available: True`
 - `GPU name: NVIDIA GeForce RTX 4090 D`
 - `environment check passed`
+
+## Data Pipeline
+
+### Dataset
+
+- **Source**: DIV2K (800 train + 100 valid HR images)
+- **Location**:  (pre-installed on server)
+- **Split**:
+  - Train: 600 images
+  - Val: 50 images
+  - Test: 50 images
+
+### Directory Structure
+
+
+
+### Scripts
+
+=== Step 1: Create directories ===
+=== Step 2: Unzip DIV2K train HR ===
+
+### Bicubic Baseline Results
+
+| Metric | Value |
+|--------|-------|
+| Avg PSNR | 30.90 dB |
+| Avg SSIM | 0.8975 |
+| Test Images | 50 |
+
+Comparison images: 
+Metrics CSV: 
