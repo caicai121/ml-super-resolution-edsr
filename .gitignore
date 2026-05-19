@@ -1,0 +1,41 @@
+# ===== 数据与模型权重（大文件，不入库）=====
+data/
+datasets/
+checkpoints/
+weights/
+runs/
+results/
+*.pth
+*.pt
+*.ckpt
+*.npy
+*.npz
+
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.ipynb_checkpoints/
+.pytest_cache/
+.mypy_cache/
+
+# ===== 虚拟环境 =====
+.venv/
+venv/
+env/
+
+# ===== 编辑器 / IDE =====
+.vscode/
+.idea/
+*.swp
+
+# ===== macOS =====
+.DS_Store
+
+# ===== Windows =====
+Thumbs.db
+desktop.ini
+
+# ===== Jupyter =====
+*.ipynb_checkpoints
