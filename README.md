@@ -48,3 +48,28 @@ PyTorch 项目。Mac 本地仅用于代码开发与调试；模型训练统一�
 
 DIV2K 数据集与训练得到的模型权重体积较大，**不**纳入 Git 仓库管理。
 数据集放置路径与权重保存路径将在 M1 阶段在 README 中明确给出。
+
+## Server Environment Setup
+
+**Current server uses conda base environment (PyTorch 2.1.2+cu121 pre-installed).**
+
+The `.venv` directory exists but is not currently used. To use the pre-configured conda base environment:
+
+```bash
+cd ~/Code/ml-super-resolution-edsr
+# Ensure you are NOT in .venv; use conda base directly
+which python  # should show /root/miniconda3/bin/python
+pip install -r requirements.txt
+python scripts/check_env.py
+```
+
+### Environment Check
+
+```bash
+python scripts/check_env.py
+```
+
+Expected output includes:
+- `CUDA available: True`
+- `GPU name: NVIDIA GeForce RTX 4090 D`
+- `environment check passed`
