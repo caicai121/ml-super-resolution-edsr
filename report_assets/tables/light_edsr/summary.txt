@@ -1,0 +1,13 @@
+LIGHT_EDSR Test Results
+==================================================
+Images: 50
+Avg PSNR: 30.34 dB
+Avg SSIM: 0.8883
+
+Comparison:
+  Bicubic:     PSNR = 30.90 dB, SSIM = 0.8975
+  SRCNN:       PSNR = 30.00 dB, SSIM = 0.8855
+  light_edsr:  PSNR = 30.34 dB, SSIM = 0.8883
+
+  vs SRCNN:   PSNR +0.34 dB, SSIM +0.0028
+  vs Bicubic: PSNR -0.56 dB, SSIM -0.0092

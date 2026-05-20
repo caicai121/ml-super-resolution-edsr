@@ -12,7 +12,9 @@ from torch.utils.data import Dataset
 class SRDataset(Dataset):
     """Super-Resolution dataset.
 
-    Returns (lr_up, hr) pairs where lr_up is bicubic-upsampled to HR size.
+    Returns lr (raw LR), lr_up (bicubic-upsampled), hr, name.
+    - SRCNN uses lr_up as input
+    - EDSR uses lr as input
     """
 
     def __init__(self, hr_dir, lr_dir, scale=2, patch_size=None, split="train"):
@@ -54,11 +56,13 @@ class SRDataset(Dataset):
         lr_up = lr.resize((hr_w, hr_h), Image.BICUBIC)
 
         # Convert to tensors [0, 1]
+        lr_np = np.array(lr).astype(np.float32) / 255.0
         lr_up = np.array(lr_up).astype(np.float32) / 255.0
         hr = np.array(hr).astype(np.float32) / 255.0
 
         # HWC -> CHW
+        lr_np = lr_np.transpose(2, 0, 1)
         lr_up = lr_up.transpose(2, 0, 1)
         hr = hr.transpose(2, 0, 1)
 
-        return {"lr_up": lr_up, "hr": hr, "name": name}
+        return {"lr": lr_np, "lr_up": lr_up, "hr": hr, "name": name}

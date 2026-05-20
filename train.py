@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""Training script for SRCNN."""
+"""Training script for super-resolution models (SRCNN, Light-EDSR)."""
 
 import argparse
 import csv
-import os
 import sys
 from pathlib import Path
 
@@ -16,22 +15,53 @@ import yaml
 sys.path.insert(0, str(Path(__file__).parent))
 
 from models.srcnn import SRCNN
+from models.edsr import LightEDSR
 from utils.dataset import SRDataset
 from utils.metrics import calculate_metrics
 from utils.image_utils import tensor_to_np
 from utils.plot_utils import plot_loss_curve
 
 
-def validate(model, val_loader, device):
+def build_model(cfg):
+    """Build model from config."""
+    model_name = cfg["model"]
+    scale = cfg["scale"]
+
+    if model_name == "srcnn":
+        channels = cfg.get("channels", 3)
+        model = SRCNN(channels=channels)
+        input_key = "lr_up"
+        ckpt_name = "best_srcnn.pth"
+        last_name = "last_srcnn.pth"
+    elif model_name == "light_edsr":
+        mp = cfg.get("model_params", {})
+        model = LightEDSR(
+            in_channels=mp.get("in_channels", 3),
+            out_channels=mp.get("out_channels", 3),
+            num_features=mp.get("num_features", 64),
+            num_res_blocks=mp.get("num_res_blocks", 8),
+            res_scale=mp.get("res_scale", 0.1),
+            scale=scale,
+        )
+        input_key = "lr"
+        ckpt_name = "best_light_edsr.pth"
+        last_name = "last_light_edsr.pth"
+    else:
+        raise ValueError(f"Unknown model: {model_name}")
+
+    return model, input_key, ckpt_name, last_name
+
+
+def validate(model, val_loader, device, input_key):
     """Run validation and return avg PSNR and SSIM."""
     model.eval()
     psnrs, ssims = [], []
 
     with torch.no_grad():
         for batch in val_loader:
-            lr_up = batch["lr_up"].to(device)
+            inp = batch[input_key].to(device)
             hr = batch["hr"].to(device)
-            sr = model(lr_up)
+            sr = model(inp)
 
             for i in range(sr.shape[0]):
                 sr_np = tensor_to_np(sr[i])
@@ -53,12 +83,13 @@ def main():
     with open(args.config) as f:
         cfg = yaml.safe_load(f)
 
+    torch.backends.cudnn.benchmark = True
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device}")
 
-    # Config
+    model_name = cfg["model"]
     scale = cfg["scale"]
-    channels = cfg["channels"]
     epochs = args.epochs if args.epochs else cfg["train"]["epochs"]
     batch_size = cfg["train"]["batch_size"]
     patch_size = cfg["train"]["patch_size"]
@@ -81,15 +112,20 @@ def main():
     )
 
     train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True,
-                              num_workers=num_workers, pin_memory=True, drop_last=True)
+                              num_workers=num_workers, pin_memory=True, drop_last=True,
+                              persistent_workers=True, prefetch_factor=4)
     val_loader = DataLoader(val_set, batch_size=1, shuffle=False,
-                            num_workers=num_workers, pin_memory=True)
+                            num_workers=num_workers, pin_memory=True,
+                            persistent_workers=True)
 
+    print(f"Model: {model_name}")
     print(f"Train images: {len(train_set)}, Val images: {len(val_set)}")
 
     # Model
-    model = SRCNN(channels=channels).to(device)
+    model, input_key, ckpt_name, last_name = build_model(cfg)
+    model = model.to(device)
     print(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")
+    print(f"Input key: {input_key}")
 
     # Loss and optimizer
     criterion = nn.L1Loss()
@@ -107,18 +143,20 @@ def main():
         num_batches = 0
 
         for batch in train_loader:
-            lr_up = batch["lr_up"].to(device)
+            inp = batch[input_key].to(device)
             hr = batch["hr"].to(device)
 
             if first_batch:
                 print(f"\n[Shape Check - Epoch {epoch}, Batch 1]")
-                print(f"  lr_up shape: {lr_up.shape}")
+                if "lr" in batch:
+                    print(f"  lr shape:    {batch['lr'].shape}")
+                print(f"  input shape: {inp.shape}")
                 print(f"  hr shape:    {hr.shape}")
                 first_batch = False
 
-            sr = model(lr_up)
+            sr = model(inp)
 
-            if first_batch is False and epoch == 1 and num_batches == 0:
+            if num_batches == 0 and epoch == 1:
                 print(f"  sr shape:    {sr.shape}")
 
             loss = criterion(sr, hr)
@@ -133,7 +171,7 @@ def main():
         avg_loss = epoch_loss / num_batches
 
         # Validation
-        val_psnr, val_ssim = validate(model, val_loader, device)
+        val_psnr, val_ssim = validate(model, val_loader, device, input_key)
 
         train_losses.append(avg_loss)
         val_psnrs.append(val_psnr)
@@ -152,7 +190,8 @@ def main():
                 "psnr": val_psnr,
                 "ssim": val_ssim,
                 "loss": avg_loss,
-            }, save_dir / "best_srcnn.pth")
+                "model_name": model_name,
+            }, save_dir / ckpt_name)
             print(f"  -> New best model saved (PSNR: {best_psnr:.2f})")
 
         # Save last
@@ -163,7 +202,8 @@ def main():
             "psnr": val_psnr,
             "ssim": val_ssim,
             "loss": avg_loss,
-        }, save_dir / "last_srcnn.pth")
+            "model_name": model_name,
+        }, save_dir / last_name)
 
     # Save training log
     log_path = eval_dir / "train_log.csv"
@@ -171,8 +211,7 @@ def main():
         writer = csv.writer(f)
         writer.writerow(["epoch", "train_loss", "val_psnr", "val_ssim"])
         for i in range(epochs):
-            writer.writerow([i + 1, train_losses[i], val_psnrs[i],
-                             ""])  # SSIM not saved per-epoch in list, reuse psnrs
+            writer.writerow([i + 1, train_losses[i], val_psnrs[i], ""])
 
     # Save loss curve
     plot_loss_curve(train_losses, val_psnrs, eval_dir / "loss_curve.png")
