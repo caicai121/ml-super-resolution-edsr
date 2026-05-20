@@ -1,0 +1,32 @@
+model: rcan
+scale: 4
+
+data:
+  root: data
+  train_hr: data/train/HR
+  train_lr: data/train/LR_x4
+  val_hr: data/val/HR
+  val_lr: data/val/LR_x4
+  test_hr: data/test/HR
+  test_lr: data/test/LR_x4
+
+model_params:
+  in_channels: 3
+  out_channels: 3
+  num_features: 64
+  num_resgroups: 10
+  num_resblocks: 20
+  reduction: 16
+
+train:
+  epochs: 20
+  batch_size: 8
+  patch_size: 192
+  lr: 0.00001
+  num_workers: 8
+  loss: l1
+  save_dir: checkpoints/rcan_x4
+
+eval:
+  save_dir: results/rcan_x4
+  compare_dir: results/comparisons_rcan_x4

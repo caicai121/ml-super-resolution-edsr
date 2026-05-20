@@ -1,0 +1,8 @@
+BSDS500 Gray x4 Test Summary
+=============================================
+
+Method          | RGB PSNR | Gray PSNR | Y+crop PSNR
+-------------------------------------------------------
+Bicubic x4      |   24.82  |   24.82  |   26.13
+RCAN x4 pretrain |   25.17  |   25.16  |   26.45
+vs Bicubic       |  +0.34  |  +0.34  |  +0.32

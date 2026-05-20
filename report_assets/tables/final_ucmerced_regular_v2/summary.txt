@@ -1,0 +1,19 @@
+Final Dataset: UC Merced Regular v2
+==================================================
+Theme: Regular Remote Sensing Scene x4 SR
+Classes: airplane, baseball_diamond, golf_course, runway, tennis_court
+Images: 500 (100 per class)
+HR: 256x256, LR_x4: 64x64
+
+Method                    |  RGB PSNR |  RGB SSIM |  Y+crop PSNR |  Y+crop SSIM
+--------------------------------------------------------------------------------
+Bicubic x4                |    27.79  |   0.7392  |       29.20  |      0.7730
+RCAN x4 pretrained        |    30.48  |   0.8166  |       32.08  |      0.8473
+vs Bicubic                |   +2.69  | +0.0775  |      +2.88  | +0.0743
+
+Per-class RCAN Y+crop PSNR:
+  baseball            : 33.81 dB
+  golf                : 33.67 dB
+  runway              : 32.23 dB
+  airplane            : 30.39 dB
+  tennis              : 30.32 dB

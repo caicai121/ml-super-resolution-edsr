@@ -1,127 +1,95 @@
-# ml-super-resolution-edsr
+# 基于 RCAN 的规则遥感场景图像 ×4 超分辨率重建系统
 
-机器学习大作业：基于 EDSR 的单图像超分辨率重建（Single Image Super-Resolution, SISR）。
+机器学习大作业：使用 RCAN（Residual Channel Attention Network）对规则遥感场景图像进行 ×4 超分辨率重建。
 
 ## 项目目标
 
-在 DIV2K 数据集上，实现并训练一个轻量化的 EDSR 模型用于 ×4 超分辨率任务，
-与经典 baseline 进行系统对比，并通过自定义改进模块进一步提升 PSNR / SSIM。
+在 UC Merced Land Use 数据集的规则场景子集上，使用预训练 RCAN 模型完成 ×4 超分辨率任务，
+通过 Bicubic baseline 对比验证深度学习方法的有效性，并以 Y 通道 PSNR/SSIM 作为标准评价指标。
 
 ## 技术路线
 
-按 baseline → 主干 → 改进的顺序逐步推进，每个阶段保留独立的实验记录。
+1. **Baseline — Bicubic 插值**：作为最基本的对照。
+2. **主干模型 — RCAN ×4 pretrained**：预训练权重来自 [yulunzhang/RCAN](https://github.com/yulunzhang/RCAN)，Residual Channel Attention Network，约 1560 万参数。
+3. **可选改进 — Self-Ensemble**：测试是否能进一步提升指标。
 
-1. **Baseline 1 — Bicubic 插值**：作为最基本的对照。
-2. **Baseline 2 — SRCNN**：经典三层 CNN 超分模型。
-3. **主干模型 — Light-EDSR**：参数量受限的 EDSR 变体（减少残差块数量与通道数）。
-4. **改进模型 — MSRA-EDSR**：在 Light-EDSR 基础上引入注意力机制 / 边缘损失等改进。
-5. **消融实验**：逐一验证改进模块的贡献。
+## 数据集
 
-评测指标：PSNR、SSIM；同时输出可视化对比图。
+**最终数据集：UC Merced Land Use — 规则遥感场景子集 (regular v2)**
 
-## 阶段 TODO
+| 类别 | 数量 | 说明 |
+|------|------|------|
+| airplane | 100 | 机场场景 |
+| baseball_diamond | 100 | 棒球场 |
+| golf_course | 100 | 高尔夫球场 |
+| runway | 100 | 跑道 |
+| tennis_court | 100 | 网球场 |
 
-- [ ] M1 工程脚手架与数据流水线（DIV2K 读取、LR/HR 配对、patch 采样）
-- [ ] M2 跑通 Bicubic + SRCNN baseline，产出指标与对比图
-- [ ] M3 实现并训练 Light-EDSR
-- [ ] M4 加入改进模块，完成消融实验
-- [ ] M5 整理实验结果、撰写技术报告
+- 总计：500 张
+- HR 尺寸：256×256
+- LR 尺寸（×4 Bicubic 下采样）：64×64
+- 主题统一，场景结构规则，适合展示 ×4 超分辨率效果
+
+## 最终结果
+
+| 方法 | RGB PSNR | RGB SSIM | Y+crop PSNR | Y+crop SSIM |
+|------|----------|----------|-------------|-------------|
+| Bicubic ×4 | 27.79 | 0.7392 | 29.20 | 0.7730 |
+| **RCAN ×4 pretrained** | **30.48** | **0.8166** | **32.08** | **0.8473** |
+| vs Bicubic | +2.69 | +0.0775 | +2.88 | +0.0743 |
+
+### 按类别 RCAN Y+crop PSNR
+
+| 类别 | PSNR |
+|------|------|
+| baseball_diamond | 33.81 dB |
+| golf_course | 33.67 dB |
+| runway | 32.23 dB |
+| airplane | 30.39 dB |
+| tennis_court | 30.32 dB |
+
+## 目录结构
+
+```
+├── models/              # 模型定义（rcan.py, srcnn.py, edsr.py）
+├── utils/               # 数据集、指标、绘图工具
+├── configs/             # 实验配置文件
+├── scripts/             # 数据处理与评测脚本
+├── data/                # DIV2K 数据（symlink）
+├── data_experiments/    # 实验数据（UC Merced 等，不入库）
+├── results/             # 评测结果（不入库）
+├── report_assets/       # 报告用图表（入库）
+│   ├── figures/         # 对比图
+│   └── tables/          # 指标表格
+├── checkpoints/         # 模型权重（不入库）
+└── README.md
+```
 
 ## 运行环境
 
-PyTorch 项目。Mac 本地仅用于代码开发与调试；模型训练统一在 GPU 服务器（AutoDL）上进行。
-
-详细的环境安装命令将在 M1 阶段补充到本节。
-
-## 目录说明
-
-仓库当前为初始化状态，目录结构会随各阶段推进逐步添加。规划中的主要目录：
-
-- `models/` 模型定义
-- `utils/` 数据集、指标、绘图等工具
-- `configs/` 各实验的配置文件
-- `scripts/` 一键训练 / 评测脚本
-- `results/` 评测指标、loss 曲线、对比图（大文件不入库）
-- `checkpoints/` 模型权重（不入库）
-
-## 数据与权重
-
-DIV2K 数据集与训练得到的模型权重体积较大，**不**纳入 Git 仓库管理。
-数据集放置路径与权重保存路径将在 M1 阶段在 README 中明确给出。
-
-## Server Environment Setup
-
-**Current server uses conda base environment (PyTorch 2.1.2+cu121 pre-installed).**
-
-The `.venv` directory exists but is not currently used. To use the pre-configured conda base environment:
+- Python 3.10.8 + PyTorch 2.1.2+cu121
+- GPU: NVIDIA GeForce RTX 4090 D (24GB)
+- 训练/推理在 AutoDL GPU 服务器上进行
 
 ```bash
 cd ~/Code/ml-super-resolution-edsr
-# Ensure you are NOT in .venv; use conda base directly
-which python  # should show /root/miniconda3/bin/python
-pip install -r requirements.txt
+source /root/miniconda3/etc/profile.d/conda.sh && conda activate base
 python scripts/check_env.py
 ```
 
-### Environment Check
+## 评测说明
+
+标准评测协议（与 EDSR/RDN/RCAN 论文一致）：
+- 将 RGB 转为 Y（亮度）通道
+- 裁剪边界像素（crop_border = scale = 4）
+- 计算 Y 通道 PSNR 和 SSIM
+
+## 快速复现
 
 ```bash
-python scripts/check_env.py
-```
+# RCAN ×4 推理（使用预训练权重）
+/root/miniconda3/bin/python scripts/test_rcan_final.py
 
-Expected output includes:
-- `CUDA available: True`
-- `GPU name: NVIDIA GeForce RTX 4090 D`
-- `environment check passed`
-
-## Data Pipeline
-
-### Dataset
-
-- **Source**: DIV2K (800 train + 100 valid HR images)
-- **Location**:  (pre-installed on server)
-- **Split**:
-  - Train: 600 images
-  - Val: 50 images
-  - Test: 50 images
-
-### Directory Structure
-
-
-
-### Scripts
-
-=== Step 1: Create directories ===
-=== Step 2: Unzip DIV2K train HR ===
-
-### Bicubic Baseline Results
-
-| Metric | Value |
-|--------|-------|
-| Avg PSNR | 30.90 dB |
-| Avg SSIM | 0.8975 |
-| Test Images | 50 |
-
-Comparison images: 
-Metrics CSV: 
-
-### x4 / x8 可视化补充实验
-
-由于 x2 超分任务中低分辨率图像仍保留较多结构信息，Bicubic 插值结果与深度学习模型在整体视觉上差异不明显。为了更直观展示图像退化程度，本项目额外构造 x4 和 x8 下采样样例，并使用 Bicubic 放大回原尺寸，与 HR 原图进行对比。该实验仅用于主观视觉分析，不作为当前主线模型训练结果。
-
-| Metric | x2 Bicubic | x4 Bicubic | x8 Bicubic |
-|--------|-----------|------------|------------|
-| Avg PSNR | 30.90 dB | 27.61 dB | 24.73 dB |
-| Avg SSIM | 0.8975 | 0.7909 | 0.6797 |
-
-对比图：`results/comparisons_x4_visual/`、`results/comparisons_x8_visual/`
-
-运行命令：
-
-```bash
-/root/miniconda3/bin/python scripts/x4_visual_demo.py \\
-  --hr_dir data/test/HR \\
-  --out_dir results/comparisons_x4_visual \\
-  --report_dir report_assets/figures/x4_visual \\
-  --num_images 5
+# Bicubic ×4 baseline
+/root/miniconda3/bin/python scripts/test_ucmerced_regular_bicubic.py
 ```

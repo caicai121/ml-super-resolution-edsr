@@ -32,12 +32,12 @@ def plot_loss_curve(train_losses, val_psnrs, save_path):
     plt.close()
 
 
-def create_comparison(lr_img, bicubic_img, sr_img, hr_img, save_path, title=""):
+def create_comparison(lr_img, bicubic_img, sr_img, hr_img, save_path, title="", scale=4):
     """Create 4-column comparison: LR / Bicubic / SR / HR."""
     fig, axes = plt.subplots(1, 4, figsize=(20, 5))
 
     axes[0].imshow(lr_img)
-    axes[0].set_title("LR (x2 down)")
+    axes[0].set_title(f"LR (x{scale} down)")
     axes[0].axis("off")
 
     axes[1].imshow(bicubic_img)

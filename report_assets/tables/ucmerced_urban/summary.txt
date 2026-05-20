@@ -1,0 +1,14 @@
+UC Merced Urban x4 Test Summary
+=============================================
+
+Method               |  RGB PSNR |  Y+crop PSNR
+--------------------------------------------------
+Bicubic x4           |    23.56  |       24.79
+RCAN x4 pretrain     |    26.46  |       27.82
+vs Bicubic           |   +2.90  |      +3.03
+
+Cross-dataset comparison (Y+crop):
+  DIV2K:            30.40 dB
+  BSDS500 gray:     26.45 dB
+  BSDS500 color:    26.53 dB
+  UC Merced urban:  27.82 dB

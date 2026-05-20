@@ -1,0 +1,13 @@
+BSDS500 Color x4 Test Summary
+=============================================
+
+Method          | RGB PSNR | Y+crop PSNR
+---------------------------------------------
+Bicubic x4      |   24.82  |   26.14
+RCAN x4 pretrain |   25.23  |   26.53
+vs Bicubic       |  +0.40  |  +0.39
+
+Comparison across datasets (Y+crop):
+  DIV2K:         30.40 dB
+  BSDS500 gray:  26.45 dB
+  BSDS500 color: 26.53 dB

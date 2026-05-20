@@ -111,6 +111,7 @@ def eval_srcnn(hr_dir, lr_dir, scale, device):
 def eval_light_edsr(hr_dir, lr_dir, scale, device):
     """Load Light-EDSR checkpoint and evaluate."""
     from models.edsr import LightEDSR
+from models.rcan import RCAN
 
     ckpt_path = Path("checkpoints/light_edsr/best_light_edsr.pth")
     if not ckpt_path.exists():
@@ -160,6 +161,61 @@ def eval_light_edsr(hr_dir, lr_dir, scale, device):
     return results
 
 
+
+def eval_rcan_x4(hr_dir, lr_dir, scale, device):
+    """Load RCAN x4 checkpoint and evaluate."""
+    ckpt_path = Path("checkpoints/rcan_x4/best_rcan_x4.pth")
+    if not ckpt_path.exists():
+        ckpt_path = Path("checkpoints/rcan_x4/pretrained_rcan_x4.pth")
+    if not ckpt_path.exists():
+        print(f"  RCAN x4 checkpoint not found")
+        return None
+
+    hr_dir = Path(hr_dir)
+    lr_dir = Path(lr_dir)
+
+    model = RCAN(
+        in_channels=3, out_channels=3,
+        num_features=64, num_resgroups=10,
+        num_resblocks=20, reduction=16, scale=4,
+    ).to(device)
+    ckpt = torch.load(ckpt_path, map_location=device, weights_only=False)
+    if "model_state_dict" in ckpt:
+        model.load_state_dict(ckpt["model_state_dict"])
+    else:
+        model.load_state_dict(ckpt)
+    model.eval()
+
+    results = []
+    lr_images = sorted(lr_dir.glob("*.png"))
+
+    with torch.no_grad():
+        for lr_path in lr_images:
+            name = lr_path.name
+            hr_path = hr_dir / name
+            if not hr_path.exists():
+                continue
+
+            hr = np.array(Image.open(hr_path).convert("RGB"))
+            lr = np.array(Image.open(lr_path).convert("RGB"), dtype=np.float32) / 255.0
+            inp = torch.from_numpy(lr).permute(2, 0, 1).unsqueeze(0).to(device)
+
+            sr = model(inp)
+            sr_np = (sr[0].cpu().numpy().clip(0, 1).transpose(1, 2, 0) * 255.0).astype(np.uint8)
+
+            m_rgb = calculate_metrics(hr, sr_np)
+            m_std = calculate_metrics_standard(hr, sr_np, scale=scale)
+
+            results.append({
+                "image": name,
+                "psnr_rgb": m_rgb["psnr"],
+                "ssim_rgb": m_rgb["ssim"],
+                "psnr_y": m_std["psnr"],
+                "ssim_y": m_std["ssim"],
+            })
+
+    return results
+
 def save_results(results, save_path, model_name):
     """Save metrics CSV and print summary."""
     save_path = Path(save_path)
@@ -185,7 +241,7 @@ def save_results(results, save_path, model_name):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", type=str, default=None,
-                        choices=["bicubic", "srcnn", "light_edsr", "x4_bicubic"])
+                        choices=["bicubic", "srcnn", "light_edsr", "x4_bicubic", "rcan_x4", "bicubic_x4_full"])
     parser.add_argument("--all", action="store_true")
     args = parser.parse_args()
 
@@ -201,6 +257,10 @@ def main():
         models.append("light_edsr")
     if args.all or args.model == "x4_bicubic":
         models.append("x4_bicubic")
+    if args.all or args.model == "rcan_x4":
+        models.append("rcan_x4")
+    if args.all or args.model == "bicubic_x4_full":
+        models.append("bicubic_x4_full")
 
     summary = {}
 
@@ -239,6 +299,23 @@ def main():
             if results:
                 summary["Bicubic (x4)"] = save_results(
                     results, "report_assets/tables/standard_metrics_x4_bicubic.csv", "Bicubic (x4)"
+                )
+
+
+        elif name == "bicubic_x4_full":
+            results = eval_from_images(
+                "results/bicubic_x4/images", "data/test/HR", scale=4, model_name="Bicubic (x4 full)"
+            )
+            if results:
+                summary["Bicubic (x4)"] = save_results(
+                    results, "report_assets/tables/standard_metrics_bicubic_x4.csv", "Bicubic (x4 full)"
+                )
+
+        elif name == "rcan_x4":
+            results = eval_rcan_x4("data/test/HR", "data/test/LR_x4", scale=4, device=device)
+            if results:
+                summary["RCAN (x4)"] = save_results(
+                    results, "report_assets/tables/standard_metrics_rcan_x4.csv", "RCAN (x4)"
                 )
 
     # Print comparison table

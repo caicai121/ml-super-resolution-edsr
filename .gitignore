@@ -1,5 +1,6 @@
 # ===== 数据与模型权重（大文件，不入库）=====
 data/
+data
 datasets/
 checkpoints/
 weights/
@@ -39,3 +40,4 @@ desktop.ini
 
 # ===== Jupyter =====
 *.ipynb_checkpoints
+data_experiments

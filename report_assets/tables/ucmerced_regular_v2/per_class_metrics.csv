@@ -1,0 +1,6 @@
+category,count,psnr_y,avg_ed
+airplane,100,30.39,8.0
+baseball,100,33.81,5.7
+golf,100,33.67,5.9
+runway,100,32.23,7.4
+tennis,100,30.32,7.9

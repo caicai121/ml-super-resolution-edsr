@@ -16,6 +16,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from models.srcnn import SRCNN
 from models.edsr import LightEDSR
+from models.rcan import RCAN
 from utils.dataset import SRDataset
 from utils.metrics import calculate_metrics
 from utils.image_utils import tensor_to_np
@@ -46,6 +47,20 @@ def build_model(cfg):
         input_key = "lr"
         ckpt_name = "best_light_edsr.pth"
         last_name = "last_light_edsr.pth"
+    elif model_name == "rcan":
+        mp = cfg.get("model_params", {})
+        model = RCAN(
+            in_channels=mp.get("in_channels", 3),
+            out_channels=mp.get("out_channels", 3),
+            num_features=mp.get("num_features", 64),
+            num_resgroups=mp.get("num_resgroups", 10),
+            num_resblocks=mp.get("num_resblocks", 20),
+            reduction=mp.get("reduction", 16),
+            scale=scale,
+        )
+        input_key = "lr"
+        ckpt_name = "best_rcan_x4.pth"
+        last_name = "last_rcan_x4.pth"
     else:
         raise ValueError(f"Unknown model: {model_name}")
 

@@ -1,0 +1,3 @@
+Method,RGB PSNR,Y+crop PSNR
+Bicubic x4,27.79,29.20
+RCAN x4,30.48,32.08

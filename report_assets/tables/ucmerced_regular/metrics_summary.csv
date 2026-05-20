@@ -1,0 +1,3 @@
+Method,RGB PSNR,RGB SSIM,Y+crop PSNR,Y+crop SSIM
+Bicubic x4,25.67,0.7154,27.04,0.7471
+RCAN x4 pretrained,28.46,0.8100,30.00,0.8387

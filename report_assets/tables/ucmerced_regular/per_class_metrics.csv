@@ -1,0 +1,6 @@
+category,count,psnr_rgb,psnr_y,ssim_y
+airplane,100,28.68,30.39,0.8539
+baseball,100,32.17,33.81,0.8540
+parking,100,21.97,23.27,0.7975
+runway,100,30.49,32.23,0.8481
+tennis,100,28.98,30.32,0.8403
