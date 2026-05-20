@@ -104,3 +104,24 @@ Expected output includes:
 
 Comparison images: 
 Metrics CSV: 
+
+### x4 可视化补充实验
+
+由于 x2 超分任务中低分辨率图像仍保留较多结构信息，Bicubic 插值结果与深度学习模型在整体视觉上差异不明显。为了更直观展示低分辨率退化造成的细节丢失，本项目额外构造 x4 下采样样例，并对比 LR_x4、Bicubic_x4 与 HR 原图。该实验仅用于主观视觉分析，不作为当前主线模型训练结果。
+
+| Metric | x2 Bicubic | x4 Bicubic |
+|--------|-----------|------------|
+| Avg PSNR | 30.90 dB | 27.61 dB |
+| Avg SSIM | 0.8975 | 0.7909 |
+
+对比图：`results/comparisons_x4_visual/`
+
+运行命令：
+
+```bash
+/root/miniconda3/bin/python scripts/x4_visual_demo.py \\
+  --hr_dir data/test/HR \\
+  --out_dir results/comparisons_x4_visual \\
+  --report_dir report_assets/figures/x4_visual \\
+  --num_images 5
+```
