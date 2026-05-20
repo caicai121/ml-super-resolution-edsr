@@ -1,0 +1,25 @@
+model: srcnn
+scale: 2
+channels: 3
+
+data:
+  root: data
+  train_hr: data/train/HR
+  train_lr: data/train/LR_x2
+  val_hr: data/val/HR
+  val_lr: data/val/LR_x2
+  test_hr: data/test/HR
+  test_lr: data/test/LR_x2
+
+train:
+  epochs: 30
+  batch_size: 16
+  patch_size: 96
+  lr: 0.0001
+  num_workers: 4
+  loss: l1
+  save_dir: checkpoints/srcnn
+
+eval:
+  save_dir: results/srcnn
+  compare_dir: results/comparisons_srcnn

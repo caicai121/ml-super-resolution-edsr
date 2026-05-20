@@ -1,0 +1,62 @@
+SRCNN Test Results
+=SRCNN Test Results
+=SRCNN Test Results
+=SRCNN Test Results
+=SRCNN Test Results
+=SRCNN Test Results
+=SRCNN Test Results
+=SRCNN Test Results
+=SRCNN Test Results
+=SRCNN Test Results
+=SRCNN Test Results
+=SRCNN Test Results
+=SRCNN Test Results
+=SRCNN Test Results
+=SRCNN Test Results
+=SRCNN Test Results
+=SRCNN Test Results
+=SRCNN Test Results
+=SRCNN Test Results
+=SRCNN Test Results
+=SRCNN Test Results
+=SRCNN Test Results
+=SRCNN Test Results
+=SRCNN Test Results
+=SRCNN Test Results
+=SRCNN Test Results
+=SRCNN Test Results
+=SRCNN Test Results
+=SRCNN Test Results
+=SRCNN Test Results
+=SRCNN Test Results
+=SRCNN Test Results
+=SRCNN Test Results
+=SRCNN Test Results
+=SRCNN Test Results
+=SRCNN Test Results
+=SRCNN Test Results
+=SRCNN Test Results
+=SRCNN Test Results
+=SRCNN Test Results
+=SRCNN Test Results
+=SRCNN Test Results
+=SRCNN Test Results
+=SRCNN Test Results
+=SRCNN Test Results
+=SRCNN Test Results
+=SRCNN Test Results
+=SRCNN Test Results
+=SRCNN Test Results
+=SRCNN Test Results
+=
+Images: 50
+Avg PSNR: 30.00 dB
+Avg SSIM: 0.8855
+
+Bicubic Baseline:
+Avg PSNR: 30.90 dB
+Avg SSIM: 0.8975
+
+SRCNN vs Bicubic:
+PSNR not improved (-0.90 dB)
+SSIM not improved (-0.0120)
