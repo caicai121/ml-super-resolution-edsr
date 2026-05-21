@@ -1,52 +1,85 @@
-# 基于 RCAN 的规则遥感场景图像 ×4 超分辨率重建系统
+# 基于 RCAN 的遥感图像 ×4 超分辨率重建
 
-机器学习大作业：使用 RCAN（Residual Channel Attention Network）对规则遥感场景图像进行 ×4 超分辨率重建。
-
-## 项目目标
-
-在 UC Merced Land Use 数据集的规则场景子集上，使用预训练 RCAN 模型完成 ×4 超分辨率任务，
-通过 Bicubic baseline 对比验证深度学习方法的有效性，并以 Y 通道 PSNR/SSIM 作为标准评价指标。
-
-## 技术路线
-
-1. **Baseline — Bicubic 插值**：作为最基本的对照。
-2. **主干模型 — RCAN ×4 pretrained**：预训练权重来自 [yulunzhang/RCAN](https://github.com/yulunzhang/RCAN)，Residual Channel Attention Network，约 1560 万参数。
-3. **可选改进 — Self-Ensemble**：测试是否能进一步提升指标。
+使用 RCAN（Residual Channel Attention Network）对 UC Merced Land Use 遥感场景图像进行 ×4 超分辨率重建，
+对比 Bicubic 插值基线与从零训练的 RCAN-small 模型，并以 Y 通道 PSNR/SSIM 作为标准评价指标。
 
 ## 数据集
 
-**最终数据集：UC Merced Land Use — 规则遥感场景子集 (regular v2)**
+UC Merced Land Use Dataset — 256×256 像素、1 英尺分辨率的航空遥感图像。
 
-| 类别 | 数量 | 说明 |
-|------|------|------|
-| airplane | 100 | 机场场景 |
-| baseball_diamond | 100 | 棒球场 |
-| golf_course | 100 | 高尔夫球场 |
-| runway | 100 | 跑道 |
-| tennis_court | 100 | 网球场 |
+选取 7 类规则遥感场景作为训练/评估数据集：
 
-- 总计：500 张
+| 类别 | 场景特征 |
+|------|----------|
+| beach | 大面积均匀纹理 |
+| golfcourse | 大面积均匀纹理 |
+| baseballdiamond | 规则几何结构 |
+| runway | 规则几何结构 |
+| freeway | 规则几何结构 |
+| tenniscourt | 规则几何结构 |
+| airplane | 混合（飞机 + 背景） |
+
+### 数据划分
+
+| 集合 | 图像数 | 每类 |
+|------|--------|------|
+| Train | 560 | 80 |
+| Val | 70 | 10 |
+| Test | 70 | 10 |
+
 - HR 尺寸：256×256
 - LR 尺寸（×4 Bicubic 下采样）：64×64
-- 主题统一，场景结构规则，适合展示 ×4 超分辨率效果
 
-## 最终结果
+## 评价指标
+
+采用双重指标（与 EDSR/RDN/RCAN 论文一致）：
+
+- **RGB PSNR**：全图 RGB 三通道计算
+- **Y+crop PSNR**：转 Y（亮度）通道，裁剪 4 像素边界后计算
+
+Y+crop 是超分辨率领域的标准评价方式，排除边界插值误差，更准确反映模型重建质量。
+
+## 模型与结果
+
+### 总体指标（Test 集）
 
 | 方法 | RGB PSNR | RGB SSIM | Y+crop PSNR | Y+crop SSIM |
 |------|----------|----------|-------------|-------------|
-| Bicubic ×4 | 27.79 | 0.7392 | 29.20 | 0.7730 |
-| **RCAN ×4 pretrained** | **30.48** | **0.8166** | **32.08** | **0.8473** |
-| vs Bicubic | +2.69 | +0.0775 | +2.88 | +0.0743 |
+| Bicubic ×4 | 27.41 | 0.7358 | 28.81 | 0.7675 |
+| **RCAN-small（从零训练）** | **29.00** | **0.7729** | **30.60** | **0.8060** |
+| vs Bicubic | +1.59 | +0.0371 | +1.79 | +0.0385 |
+| RCAN ×4 pretrained | 30.48 | 0.8166 | 32.08 | 0.8473 |
+| vs Bicubic | +3.07 | +0.0808 | +3.27 | +0.0798 |
 
-### 按类别 RCAN Y+crop PSNR
+- Bicubic 基线来自同一批图像的双三次插值上采样
+- RCAN ×4 pretrained 使用预训练权重，在 regular v2（5 类）上评测
 
-| 类别 | PSNR |
-|------|------|
-| baseball_diamond | 33.81 dB |
-| golf_course | 33.67 dB |
-| runway | 32.23 dB |
-| airplane | 30.39 dB |
-| tennis_court | 30.32 dB |
+### 按类别 Y+crop PSNR（Test 集）
+
+| 类别 | Bicubic | RCAN-small | Gain |
+|------|---------|------------|------|
+| beach | 35.74 | 36.28 | +0.53 |
+| golfcourse | 32.16 | 32.90 | +0.73 |
+| baseballdiamond | 31.35 | 32.15 | +0.80 |
+| runway | 28.21 | 29.67 | +1.47 |
+| tenniscourt | 27.07 | 27.79 | +0.72 |
+| freeway | 26.97 | 27.75 | +0.78 |
+| airplane | 26.76 | 27.67 | +0.91 |
+
+runway 类增益最大（+1.47 dB），说明 RCAN-small 对规则线性结构的恢复能力明显优于 Bicubic。
+
+## RCAN-small 模型参数
+
+| 参数 | 值 |
+|------|----|
+| num_features | 64 |
+| num_resgroups | 3 |
+| num_resblocks | 5 |
+| reduction | 16 |
+| 总参数量 | ~1M |
+| 训练轮数 | 50 |
+| 最佳 checkpoint | epoch 49 |
+| val Y+crop PSNR | 30.12 dB |
 
 ## 目录结构
 
@@ -55,8 +88,8 @@
 ├── utils/               # 数据集、指标、绘图工具
 ├── configs/             # 实验配置文件
 ├── scripts/             # 数据处理与评测脚本
-├── data/                # DIV2K 数据（symlink）
-├── data_experiments/    # 实验数据（UC Merced 等，不入库）
+├── data_final/          # 最终数据集（不入库）
+├── data_experiments/    # 其他实验数据（不入库）
 ├── results/             # 评测结果（不入库）
 ├── report_assets/       # 报告用图表（入库）
 │   ├── figures/         # 对比图
@@ -71,25 +104,17 @@
 - GPU: NVIDIA GeForce RTX 4090 D (24GB)
 - 训练/推理在 AutoDL GPU 服务器上进行
 
-```bash
-cd ~/Code/ml-super-resolution-edsr
-source /root/miniconda3/etc/profile.d/conda.sh && conda activate base
-python scripts/check_env.py
-```
-
-## 评测说明
-
-标准评测协议（与 EDSR/RDN/RCAN 论文一致）：
-- 将 RGB 转为 Y（亮度）通道
-- 裁剪边界像素（crop_border = scale = 4）
-- 计算 Y 通道 PSNR 和 SSIM
-
 ## 快速复现
 
 ```bash
-# RCAN ×4 推理（使用预训练权重）
-/root/miniconda3/bin/python scripts/test_rcan_final.py
+# RCAN-small 推理（使用最佳 checkpoint）
+/root/miniconda3/bin/python scripts/test_rcan_small.py
 
 # Bicubic ×4 baseline
 /root/miniconda3/bin/python scripts/test_ucmerced_regular_bicubic.py
 ```
+
+## 后续计划
+
+计划引入 MSER-RCAN（多尺度增强残差通道注意力网络），在 RCAN 基础上改进特征提取能力，
+进一步提升遥感场景的超分辨率重建质量。
