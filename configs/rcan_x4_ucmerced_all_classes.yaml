@@ -1,0 +1,21 @@
+# RCAN x4 pretrained test on UC Merced all 21 classes
+model: rcan
+scale: 4
+
+model_params:
+  in_channels: 3
+  out_channels: 3
+  num_features: 64
+  num_resgroups: 10
+  num_resblocks: 20
+  reduction: 16
+
+data:
+  test_hr: data_experiments/ucmerced_all_classes/HR
+  test_lr: data_experiments/ucmerced_all_classes/LR_x4
+
+eval:
+  save_dir: data_experiments/ucmerced_all_classes/results/rcan_x4
+  compare_dir: data_experiments/ucmerced_all_classes/results/comparisons
+  crop_border: 4
+  test_y_channel: true

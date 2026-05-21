@@ -60,25 +60,26 @@ def create_comparison(lr_img, bicubic_img, sr_img, hr_img, save_path, title="", 
     plt.close()
 
 
-def create_comparison_5col(lr_img, bicubic_img, srcnn_img, edsr_img, hr_img,
-                           save_path, title=""):
-    """Create 5-column comparison: LR / Bicubic / SRCNN / EDSR / HR."""
+def create_comparison_5col(lr_img, bicubic_img, model_a_img, model_b_img, hr_img,
+                           save_path, title="", scale=4,
+                           model_a_name="Model A", model_b_name="Model B"):
+    """Create 5-column comparison: LR / Bicubic / Model A / Model B / HR."""
     fig, axes = plt.subplots(1, 5, figsize=(25, 5))
 
     axes[0].imshow(lr_img)
-    axes[0].set_title("LR (x2 down)")
+    axes[0].set_title(f"LR (x{scale} down)")
     axes[0].axis("off")
 
     axes[1].imshow(bicubic_img)
     axes[1].set_title("Bicubic")
     axes[1].axis("off")
 
-    axes[2].imshow(srcnn_img)
-    axes[2].set_title("SRCNN")
+    axes[2].imshow(model_a_img)
+    axes[2].set_title(model_a_name)
     axes[2].axis("off")
 
-    axes[3].imshow(edsr_img)
-    axes[3].set_title("Light-EDSR")
+    axes[3].imshow(model_b_img)
+    axes[3].set_title(model_b_name)
     axes[3].axis("off")
 
     axes[4].imshow(hr_img)

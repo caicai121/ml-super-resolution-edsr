@@ -1,0 +1,19 @@
+model: rcan_small
+scale: 4
+model_params:
+  in_channels: 3
+  out_channels: 3
+  num_features: 64
+  num_resgroups: 3
+  num_resblocks: 5
+  reduction: 16
+data:
+  test_hr: data_experiments/ucmerced_regular_v2/HR
+  test_lr: data_experiments/ucmerced_regular_v2/LR_x4
+eval:
+  save_dir: results/generalization/ucmerced_regular_v2/rcan_small_x4
+  compare_dir: results/generalization/ucmerced_regular_v2/comparisons
+  crop_border: 4
+  test_y_channel: true
+train:
+  save_dir: checkpoints/rcan_small_x4

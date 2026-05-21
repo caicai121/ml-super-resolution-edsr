@@ -1,0 +1,32 @@
+UC Merced All Classes - RCAN x4 Ranking
+============================================================
+
+Full Ranking (by Y+crop PSNR):
+  # 1 beach_beach               Y=36.02  RGB=34.65  gain=+1.55  edge=0.0405
+  # 2 baseballdiamond_baseballdiamond Y=33.89  RGB=32.25  gain=+2.13  edge=0.0477
+  # 3 golfcourse_golfcourse     Y=33.79  RGB=32.17  gain=+1.65  edge=0.0569
+  # 4 runway_runway             Y=32.31  RGB=30.56  gain=+4.30  edge=0.0690
+  # 5 airplane_airplane         Y=30.46  RGB=28.74  gain=+3.92  edge=0.0817
+  # 6 tenniscourt_tenniscourt   Y=30.40  RGB=29.07  gain=+2.81  edge=0.1226
+  # 7 freeway_freeway           Y=30.29  RGB=28.76  gain=+3.10  edge=0.1117
+  # 8 storagetanks_storagetanks Y=29.79  RGB=28.32  gain=+3.16  edge=0.0980
+  # 9 sparseresidential_sparseresidential Y=29.55  RGB=28.12  gain=+2.04  edge=0.1417
+  #10 river_river               Y=28.70  RGB=27.33  gain=+0.95  edge=0.1464
+  #11 intersection_intersection Y=28.51  RGB=27.11  gain=+2.50  edge=0.1306
+  #12 forest_forest             Y=28.34  RGB=27.04  gain=+0.82  edge=0.2038
+  #13 overpass_overpass         Y=28.21  RGB=26.79  gain=+3.19  edge=0.1103
+  #14 denseresidential_denseresidential Y=28.15  RGB=26.76  gain=+3.62  edge=0.1510
+  #15 buildings_buildings       Y=28.08  RGB=26.64  gain=+3.81  edge=0.1234
+  #16 agricultural_agricultural Y=27.35  RGB=25.95  gain=+0.81  edge=0.2091
+  #17 mediumresidential_mediumresidential Y=27.32  RGB=25.94  gain=+2.59  edge=0.1689
+  #18 chaparral_chaparral       Y=27.07  RGB=25.67  gain=+1.68  edge=0.2303
+  #19 mobilehomepark_mobilehomepark Y=26.36  RGB=25.16  gain=+3.42  edge=0.1725
+  #20 harbor_harbor             Y=24.99  RGB=23.62  gain=+3.06  edge=0.1454
+  #21 parkinglot_parkinglot     Y=23.38  RGB=22.07  gain=+2.03  edge=0.1694
+
+Top 5: beach_beach, baseballdiamond_baseballdiamond, golfcourse_golfcourse, runway_runway, airplane_airplane
+Top 8: beach_beach, baseballdiamond_baseballdiamond, golfcourse_golfcourse, runway_runway, airplane_airplane, tenniscourt_tenniscourt, freeway_freeway, storagetanks_storagetanks
+Top 10: beach_beach, baseballdiamond_baseballdiamond, golfcourse_golfcourse, runway_runway, airplane_airplane, tenniscourt_tenniscourt, freeway_freeway, storagetanks_storagetanks, sparseresidential_sparseresidential, river_river
+Below 30dB: storagetanks_storagetanks, sparseresidential_sparseresidential, river_river, intersection_intersection, forest_forest, overpass_overpass, denseresidential_denseresidential, buildings_buildings, agricultural_agricultural, mediumresidential_mediumresidential, chaparral_chaparral, mobilehomepark_mobilehomepark, harbor_harbor, parkinglot_parkinglot
+Highest: beach_beach (36.02 dB)
+Lowest: parkinglot_parkinglot (23.38 dB)

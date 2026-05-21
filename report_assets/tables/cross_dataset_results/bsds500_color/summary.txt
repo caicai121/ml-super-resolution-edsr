@@ -1,0 +1,5 @@
+RCAN_SMALL Test Results
+==================================================
+Images: 500
+RGB PSNR:  25.21 dB | RGB SSIM:  0.7085
+Y+crop PSNR: 26.62 dB | Y+crop SSIM: 0.7347

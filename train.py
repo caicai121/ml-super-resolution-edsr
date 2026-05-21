@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Training script for super-resolution models (SRCNN, Light-EDSR)."""
+"""Training script for super-resolution models (SRCNN, Light-EDSR, RCAN)."""
 
 import argparse
 import csv
@@ -18,7 +18,7 @@ from models.srcnn import SRCNN
 from models.edsr import LightEDSR
 from models.rcan import RCAN
 from utils.dataset import SRDataset
-from utils.metrics import calculate_metrics
+from utils.metrics import calculate_metrics, calculate_metrics_standard
 from utils.image_utils import tensor_to_np
 from utils.plot_utils import plot_loss_curve
 
@@ -61,16 +61,31 @@ def build_model(cfg):
         input_key = "lr"
         ckpt_name = "best_rcan_x4.pth"
         last_name = "last_rcan_x4.pth"
+    elif model_name == "rcan_small":
+        mp = cfg.get("model_params", {})
+        model = RCAN(
+            in_channels=mp.get("in_channels", 3),
+            out_channels=mp.get("out_channels", 3),
+            num_features=mp.get("num_features", 64),
+            num_resgroups=mp.get("num_resgroups", 3),
+            num_resblocks=mp.get("num_resblocks", 5),
+            reduction=mp.get("reduction", 16),
+            scale=scale,
+        )
+        input_key = "lr"
+        ckpt_name = "best_rcan_small_x4.pth"
+        last_name = "last_rcan_small_x4.pth"
     else:
         raise ValueError(f"Unknown model: {model_name}")
 
     return model, input_key, ckpt_name, last_name
 
 
-def validate(model, val_loader, device, input_key):
-    """Run validation and return avg PSNR and SSIM."""
+def validate(model, val_loader, device, input_key, scale):
+    """Run validation and return both RGB and Y+crop metrics."""
     model.eval()
-    psnrs, ssims = [], []
+    rgb_psnrs, rgb_ssims = [], []
+    y_psnrs, y_ssims = [], []
 
     with torch.no_grad():
         for batch in val_loader:
@@ -81,12 +96,22 @@ def validate(model, val_loader, device, input_key):
             for i in range(sr.shape[0]):
                 sr_np = tensor_to_np(sr[i])
                 hr_np = tensor_to_np(hr[i])
-                m = calculate_metrics(hr_np, sr_np)
-                psnrs.append(m["psnr"])
-                ssims.append(m["ssim"])
+
+                rgb_m = calculate_metrics(hr_np, sr_np)
+                rgb_psnrs.append(rgb_m["psnr"])
+                rgb_ssims.append(rgb_m["ssim"])
+
+                y_m = calculate_metrics_standard(hr_np, sr_np, scale=scale)
+                y_psnrs.append(y_m["psnr"])
+                y_ssims.append(y_m["ssim"])
 
     model.train()
-    return np.mean(psnrs), np.mean(ssims)
+    return {
+        "rgb_psnr": np.mean(rgb_psnrs),
+        "rgb_ssim": np.mean(rgb_ssims),
+        "y_psnr": np.mean(y_psnrs),
+        "y_ssim": np.mean(y_ssims),
+    }
 
 
 def main():
@@ -147,9 +172,9 @@ def main():
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
     # Training loop
-    best_psnr = 0.0
+    best_y_psnr = 0.0
     train_losses = []
-    val_psnrs = []
+    val_metrics_history = []
     first_batch = True
 
     for epoch in range(1, epochs + 1):
@@ -185,53 +210,63 @@ def main():
 
         avg_loss = epoch_loss / num_batches
 
-        # Validation
-        val_psnr, val_ssim = validate(model, val_loader, device, input_key)
-
-        train_losses.append(avg_loss)
-        val_psnrs.append(val_psnr)
+        # Validation - both RGB and Y+crop
+        val_m = validate(model, val_loader, device, input_key, scale)
+        val_metrics_history.append(val_m)
 
         print(f"Epoch [{epoch}/{epochs}] Loss: {avg_loss:.6f} | "
-              f"Val PSNR: {val_psnr:.2f} dB | Val SSIM: {val_ssim:.4f} | "
-              f"Best PSNR: {best_psnr:.2f} dB")
+              f"RGB: {val_m['rgb_psnr']:.2f}/{val_m['rgb_ssim']:.4f} | "
+              f"Y+crop: {val_m['y_psnr']:.2f}/{val_m['y_ssim']:.4f} | "
+              f"Best Y: {best_y_psnr:.2f}")
 
-        # Save best
-        if val_psnr > best_psnr:
-            best_psnr = val_psnr
+        # Save best (by Y+crop PSNR)
+        if val_m["y_psnr"] > best_y_psnr:
+            best_y_psnr = val_m["y_psnr"]
             torch.save({
                 "epoch": epoch,
                 "model_state_dict": model.state_dict(),
                 "optimizer_state_dict": optimizer.state_dict(),
-                "psnr": val_psnr,
-                "ssim": val_ssim,
+                "psnr": val_m["rgb_psnr"],
+                "ssim": val_m["rgb_ssim"],
+                "y_psnr": val_m["y_psnr"],
+                "y_ssim": val_m["y_ssim"],
                 "loss": avg_loss,
                 "model_name": model_name,
             }, save_dir / ckpt_name)
-            print(f"  -> New best model saved (PSNR: {best_psnr:.2f})")
+            print(f"  -> New best model saved (Y+crop PSNR: {best_y_psnr:.2f})")
 
         # Save last
         torch.save({
             "epoch": epoch,
             "model_state_dict": model.state_dict(),
             "optimizer_state_dict": optimizer.state_dict(),
-            "psnr": val_psnr,
-            "ssim": val_ssim,
+            "psnr": val_m["rgb_psnr"],
+            "ssim": val_m["rgb_ssim"],
+            "y_psnr": val_m["y_psnr"],
+            "y_ssim": val_m["y_ssim"],
             "loss": avg_loss,
             "model_name": model_name,
         }, save_dir / last_name)
 
-    # Save training log
+    # Save training log with both metrics
     log_path = eval_dir / "train_log.csv"
     with open(log_path, "w", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(["epoch", "train_loss", "val_psnr", "val_ssim"])
+        writer.writerow(["epoch", "train_loss",
+                         "val_rgb_psnr", "val_rgb_ssim",
+                         "val_y_psnr", "val_y_ssim"])
         for i in range(epochs):
-            writer.writerow([i + 1, train_losses[i], val_psnrs[i], ""])
+            m = val_metrics_history[i]
+            writer.writerow([i + 1, train_losses[i],
+                             m["rgb_psnr"], m["rgb_ssim"],
+                             m["y_psnr"], m["y_ssim"]])
 
     # Save loss curve
-    plot_loss_curve(train_losses, val_psnrs, eval_dir / "loss_curve.png")
+    plot_loss_curve(train_losses,
+                    [m["y_psnr"] for m in val_metrics_history],
+                    eval_dir / "loss_curve.png")
 
-    print(f"\nTraining complete. Best Val PSNR: {best_psnr:.2f} dB")
+    print(f"\nTraining complete. Best Val Y+crop PSNR: {best_y_psnr:.2f} dB")
     print(f"Checkpoints: {save_dir}")
     print(f"Training log: {log_path}")
     print(f"Loss curve: {eval_dir / 'loss_curve.png'}")

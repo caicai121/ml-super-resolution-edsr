@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Testing script for super-resolution models (SRCNN, Light-EDSR)."""
+"""Testing script for super-resolution models (SRCNN, Light-EDSR, RCAN)."""
 
 import argparse
 import csv
@@ -18,7 +18,7 @@ from models.srcnn import SRCNN
 from models.edsr import LightEDSR
 from models.rcan import RCAN
 from utils.dataset import SRDataset
-from utils.metrics import calculate_metrics
+from utils.metrics import calculate_metrics, calculate_metrics_standard
 from utils.image_utils import tensor_to_np, save_image
 from utils.plot_utils import create_comparison, create_comparison_5col
 
@@ -58,6 +58,19 @@ def build_model(cfg):
         )
         input_key = "lr"
         ckpt_default = "best_rcan_x4.pth"
+    elif model_name == "rcan_small":
+        mp = cfg.get("model_params", {})
+        model = RCAN(
+            in_channels=mp.get("in_channels", 3),
+            out_channels=mp.get("out_channels", 3),
+            num_features=mp.get("num_features", 64),
+            num_resgroups=mp.get("num_resgroups", 3),
+            num_resblocks=mp.get("num_resblocks", 5),
+            reduction=mp.get("reduction", 16),
+            scale=scale,
+        )
+        input_key = "lr"
+        ckpt_default = "best_rcan_small_x4.pth"
     else:
         raise ValueError(f"Unknown model: {model_name}")
 
@@ -99,7 +112,7 @@ def main():
     model.eval()
 
     print(f"Checkpoint from epoch {checkpoint['epoch']}, "
-          f"Val PSNR: {checkpoint['psnr']:.2f}, Val SSIM: {checkpoint['ssim']:.4f}")
+          f"Val PSNR: {checkpoint.get('psnr', 0):.2f}")
 
     # Load SRCNN results for 5-column comparison if available
     srcnn_results = {}
@@ -137,7 +150,7 @@ def main():
             srcnn_model.eval()
             print("Loaded SRCNN model for 5-column comparison")
 
-    # Evaluate
+    # Evaluate - both RGB and Y+crop
     results = []
     compare_count = 0
 
@@ -152,8 +165,16 @@ def main():
             sr_np = tensor_to_np(sr[0])
             hr_np = tensor_to_np(hr[0])
 
-            metrics = calculate_metrics(hr_np, sr_np)
-            results.append({"image": name, "psnr": metrics["psnr"], "ssim": metrics["ssim"]})
+            rgb_m = calculate_metrics(hr_np, sr_np)
+            y_m = calculate_metrics_standard(hr_np, sr_np, scale=scale)
+
+            results.append({
+                "image": name,
+                "rgb_psnr": rgb_m["psnr"],
+                "rgb_ssim": rgb_m["ssim"],
+                "y_psnr": y_m["psnr"],
+                "y_ssim": y_m["ssim"],
+            })
 
             # Generate comparison images (first 3)
             if compare_count < 3:
@@ -165,55 +186,48 @@ def main():
                 bicubic_np = np.array(lr_pil.resize((hr_w, hr_h), Image.BICUBIC))
 
                 if srcnn_model is not None:
-                    # 5-column comparison
                     lr_up_tensor = batch["lr_up"].to(device)
                     srcnn_sr = srcnn_model(lr_up_tensor)
                     srcnn_np = tensor_to_np(srcnn_sr[0])
 
-                    comp_path = compare_dir / f"compare_light_edsr_{name}"
+                    comp_path = compare_dir / f"compare_{model_name}_{name}"
                     create_comparison_5col(
                         lr_img, bicubic_np, srcnn_np, sr_np, hr_np,
                         comp_path,
-                        title=f"SRCNN: {srcnn_results.get(name, {}).get('psnr', 0):.2f}dB | "
-                              f"EDSR: {metrics['psnr']:.2f}dB"
+                        title=f"Y={y_m['psnr']:.2f}dB"
                     )
                 else:
-                    # 4-column comparison
                     comp_path = compare_dir / f"compare_{model_name}_{name}"
                     create_comparison(
                         lr_img, bicubic_np, sr_np, hr_np, comp_path,
-                        title=f"PSNR: {metrics['psnr']:.2f} dB, SSIM: {metrics['ssim']:.4f}"
+                        title=f"Y={y_m['psnr']:.2f}dB, RGB={rgb_m['psnr']:.2f}dB"
                     )
 
                 compare_count += 1
 
-            print(f"  {name} - PSNR: {metrics['psnr']:.2f}, SSIM: {metrics['ssim']:.4f}")
+            print(f"  {name} - RGB: {rgb_m['psnr']:.2f}, Y+crop: {y_m['psnr']:.2f}")
 
-    # Save metrics CSV
+    # Save metrics CSV with both metrics
     csv_path = eval_dir / "metrics.csv"
     with open(csv_path, "w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=["image", "psnr", "ssim"])
+        writer = csv.DictWriter(f, fieldnames=[
+            "image", "rgb_psnr", "rgb_ssim", "y_psnr", "y_ssim"
+        ])
         writer.writeheader()
         writer.writerows(results)
 
     # Summary
-    avg_psnr = np.mean([r["psnr"] for r in results])
-    avg_ssim = np.mean([r["ssim"] for r in results])
+    avg_rgb_psnr = np.mean([r["rgb_psnr"] for r in results])
+    avg_rgb_ssim = np.mean([r["rgb_ssim"] for r in results])
+    avg_y_psnr = np.mean([r["y_psnr"] for r in results])
+    avg_y_ssim = np.mean([r["y_ssim"] for r in results])
 
     summary_lines = [
         f"{model_name.upper()} Test Results",
         "=" * 50,
         f"Images: {len(results)}",
-        f"Avg PSNR: {avg_psnr:.2f} dB",
-        f"Avg SSIM: {avg_ssim:.4f}",
-        "",
-        "Comparison:",
-        f"  Bicubic:     PSNR = 30.90 dB, SSIM = 0.8975",
-        f"  SRCNN:       PSNR = 30.00 dB, SSIM = 0.8855",
-        f"  {model_name}:  PSNR = {avg_psnr:.2f} dB, SSIM = {avg_ssim:.4f}",
-        "",
-        f"  vs SRCNN:   PSNR {avg_psnr - 30.00:+.2f} dB, SSIM {avg_ssim - 0.8855:+.4f}",
-        f"  vs Bicubic: PSNR {avg_psnr - 30.90:+.2f} dB, SSIM {avg_ssim - 0.8975:+.4f}",
+        f"RGB PSNR:  {avg_rgb_psnr:.2f} dB | RGB SSIM:  {avg_rgb_ssim:.4f}",
+        f"Y+crop PSNR: {avg_y_psnr:.2f} dB | Y+crop SSIM: {avg_y_ssim:.4f}",
     ]
 
     summary = "\n".join(summary_lines)
