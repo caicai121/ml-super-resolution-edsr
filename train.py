@@ -262,6 +262,14 @@ def main():
 
     # Loss and optimizer
     criterion = nn.L1Loss()
+
+    # Optional edge loss
+    edge_criterion = None
+    edge_lambda = cfg.get("train", {}).get("edge_lambda", 0.0)
+    if edge_lambda > 0:
+        from utils.losses import SobelEdgeLoss
+        edge_criterion = SobelEdgeLoss().to(device)
+        print(f"Edge Loss: SobelEdgeLoss (lambda={edge_lambda})")
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
     # Learning rate scheduler
@@ -290,6 +298,8 @@ def main():
     for epoch in range(1, epochs + 1):
         model.train()
         epoch_loss = 0.0
+        epoch_l1_loss = 0.0
+        epoch_edge_loss = 0.0
         num_batches = 0
 
         for batch in train_loader:
@@ -309,16 +319,26 @@ def main():
             if num_batches == 0 and epoch == 1:
                 print(f"  sr shape:    {sr.shape}")
 
-            loss = criterion(sr, hr)
+            l1_loss = criterion(sr, hr)
+            if edge_criterion is not None:
+                e_loss = edge_criterion(sr, hr)
+                loss = l1_loss + edge_lambda * e_loss
+            else:
+                loss = l1_loss
 
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
 
             epoch_loss += loss.item()
+            if edge_criterion is not None:
+                epoch_l1_loss += l1_loss.item()
+                epoch_edge_loss += e_loss.item()
             num_batches += 1
 
         avg_loss = epoch_loss / num_batches
+        avg_l1 = epoch_l1_loss / num_batches if edge_criterion else avg_loss
+        avg_edge = epoch_edge_loss / num_batches if edge_criterion else 0.0
         train_losses.append(avg_loss)
 
         # Validation - both RGB and Y+crop
@@ -342,6 +362,8 @@ def main():
                 "y_psnr": val_m["y_psnr"],
                 "y_ssim": val_m["y_ssim"],
                 "loss": avg_loss,
+                "l1_loss": avg_l1 if edge_criterion else avg_loss,
+                "edge_loss": avg_edge if edge_criterion else 0.0,
                 "model_name": model_name,
             }, save_dir / ckpt_name)
             print(f"  -> New best model saved (Y+crop PSNR: {best_y_psnr:.2f})")
