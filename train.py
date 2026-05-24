@@ -75,6 +75,21 @@ def build_model(cfg):
         input_key = "lr"
         ckpt_name = "best_rcan_small_x4.pth"
         last_name = "last_rcan_small_x4.pth"
+    elif model_name == "ms_rcan_small":
+        from models.rcan import MSRCAN
+        mp = cfg.get("model_params", {})
+        model = MSRCAN(
+            in_channels=mp.get("in_channels", 3),
+            out_channels=mp.get("out_channels", 3),
+            num_features=mp.get("num_features", 64),
+            num_resgroups=mp.get("num_resgroups", 3),
+            num_resblocks=mp.get("num_resblocks", 5),
+            reduction=mp.get("reduction", 16),
+            scale=scale,
+        )
+        input_key = "lr"
+        ckpt_name = "best_ms_rcan_small_x4.pth"
+        last_name = "last_ms_rcan_small_x4.pth"
     else:
         raise ValueError(f"Unknown model: {model_name}")
 
@@ -209,6 +224,7 @@ def main():
             num_batches += 1
 
         avg_loss = epoch_loss / num_batches
+        train_losses.append(avg_loss)
 
         # Validation - both RGB and Y+crop
         val_m = validate(model, val_loader, device, input_key, scale)

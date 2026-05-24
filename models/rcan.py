@@ -45,9 +45,9 @@ class RCAB(nn.Module):
 class ResidualGroup(nn.Module):
     """Residual Group: multiple RCABs + one conv."""
 
-    def __init__(self, num_features, num_resblocks, reduction=16):
+    def __init__(self, num_features, num_resblocks, reduction=16, rcab_class=RCAB):
         super().__init__()
-        body = [RCAB(num_features, reduction) for _ in range(num_resblocks)]
+        body = [rcab_class(num_features, reduction) for _ in range(num_resblocks)]
         body.append(nn.Conv2d(num_features, num_features, kernel_size=3, padding=1))
         self.body = nn.Sequential(*body)
 
@@ -83,6 +83,82 @@ class RCAN(nn.Module):
         self.body = nn.Sequential(*body)
 
         # Tail: upsampling + output
+        if scale == 4:
+            self.tail = nn.Sequential(
+                nn.Conv2d(num_features, num_features * 4, kernel_size=3, padding=1),
+                nn.PixelShuffle(2),
+                nn.Conv2d(num_features, num_features * 4, kernel_size=3, padding=1),
+                nn.PixelShuffle(2),
+                nn.Conv2d(num_features, out_channels, kernel_size=3, padding=1),
+            )
+        elif scale == 2:
+            self.tail = nn.Sequential(
+                nn.Conv2d(num_features, num_features * 4, kernel_size=3, padding=1),
+                nn.PixelShuffle(2),
+                nn.Conv2d(num_features, out_channels, kernel_size=3, padding=1),
+            )
+        else:
+            raise ValueError(f"Unsupported scale: {scale}")
+
+    def forward(self, x):
+        x = self.head(x)
+        res = self.body(x)
+        x = x + res
+        x = self.tail(x)
+        return x
+
+
+class MSRCAB(nn.Module):
+    """Multi-Scale Residual Channel Attention Block.
+
+    Replaces the single 3x3 conv in RCAB with three parallel branches
+    (1x1, 3x3, 5x5) followed by 1x1 fusion, ReLU, 3x3 conv, and CA.
+    """
+
+    def __init__(self, num_features, reduction=16):
+        super().__init__()
+        # Multi-scale branches
+        self.branch_1x1 = nn.Conv2d(num_features, num_features, kernel_size=1, padding=0)
+        self.branch_3x3 = nn.Conv2d(num_features, num_features, kernel_size=3, padding=1)
+        self.branch_5x5 = nn.Conv2d(num_features, num_features, kernel_size=5, padding=2)
+        # Fusion
+        self.fusion = nn.Conv2d(num_features * 3, num_features, kernel_size=1, padding=0)
+        # Post-fusion body (same as original RCAB tail)
+        self.body = nn.Sequential(
+            nn.ReLU(inplace=True),
+            nn.Conv2d(num_features, num_features, kernel_size=3, padding=1),
+            ChannelAttention(num_features, reduction),
+        )
+
+    def forward(self, x):
+        b1 = self.branch_1x1(x)
+        b3 = self.branch_3x3(x)
+        b5 = self.branch_5x5(x)
+        fused = self.fusion(torch.cat([b1, b3, b5], dim=1))
+        return x + self.body(fused)
+
+
+class MSRCAN(nn.Module):
+    """Multi-Scale RCAN: RCAN with MSRCAB blocks.
+
+    Same architecture as RCAN, only RCAB is replaced by MSRCAB.
+    """
+
+    def __init__(self, in_channels=3, out_channels=3, num_features=64,
+                 num_resgroups=10, num_resblocks=20, reduction=16, scale=4):
+        super().__init__()
+        self.scale = scale
+
+        # Head
+        self.head = nn.Conv2d(in_channels, num_features, kernel_size=3, padding=1)
+
+        # Body: residual groups with MSRCAB
+        body = [ResidualGroup(num_features, num_resblocks, reduction, rcab_class=MSRCAB)
+                for _ in range(num_resgroups)]
+        body.append(nn.Conv2d(num_features, num_features, kernel_size=3, padding=1))
+        self.body = nn.Sequential(*body)
+
+        # Tail: upsampling + output (identical to RCAN)
         if scale == 4:
             self.tail = nn.Sequential(
                 nn.Conv2d(num_features, num_features * 4, kernel_size=3, padding=1),
@@ -162,7 +238,7 @@ def load_pretrained_rcan(ckpt_path, model, device="cpu"):
                 continue
 
         # 4. tail structure: original tail.0.0, tail.0.2, tail.1
-        #    our model: tail.0, tail.2, tail.4 (two-step ×2 upsample)
+        #    our model: tail.0, tail.2, tail.4 (two-step x2 upsample)
         #    OR our model: tail.0, tail.2, tail.4 (same for single-step)
         tail_remap = {
             "tail.0.weight": ["tail.0.0.weight"],

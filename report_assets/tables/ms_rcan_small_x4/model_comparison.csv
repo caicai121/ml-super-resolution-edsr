@@ -1,0 +1,5 @@
+Method,Params,RGB_PSNR,RGB_SSIM,Y_crop_PSNR,Y_crop_SSIM,vs_Bicubic,vs_RCAN_small
+Bicubic_x4,0,0.0,0.0,29.75,0.0,0.0,0.0
+RCAN-small,1563199,29.00,0.0,30.60,0.0,+0.85,0.0
+MS-RCAN-small,3347839,29.06,0.7747,30.67,0.8076,+0.92,+0.07
+RCAN-pretrained,0,0.0,0.0,32.52,0.0,+2.77,+1.92
