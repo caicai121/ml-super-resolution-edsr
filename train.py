@@ -90,6 +90,36 @@ def build_model(cfg):
         input_key = "lr"
         ckpt_name = "best_ms_rcan_small_x4.pth"
         last_name = "last_ms_rcan_small_x4.pth"
+    elif model_name == "msr_rcan_small":
+        from models.rcan import MSRRCAN
+        mp = cfg.get("model_params", {})
+        model = MSRRCAN(
+            in_channels=mp.get("in_channels", 3),
+            out_channels=mp.get("out_channels", 3),
+            num_features=mp.get("num_features", 64),
+            num_resgroups=mp.get("num_resgroups", 3),
+            num_resblocks=mp.get("num_resblocks", 5),
+            reduction=mp.get("reduction", 16),
+            scale=scale,
+        )
+        input_key = "lr"
+        ckpt_name = "best_msr_rcan_small_x4.pth"
+        last_name = "last_msr_rcan_small_x4.pth"
+    elif model_name == "msr_rcan_small_v2":
+        from models.rcan import MSRRCANV2
+        mp = cfg.get("model_params", {})
+        model = MSRRCANV2(
+            in_channels=mp.get("in_channels", 3),
+            out_channels=mp.get("out_channels", 3),
+            num_features=mp.get("num_features", 64),
+            num_resgroups=mp.get("num_resgroups", 3),
+            num_resblocks=mp.get("num_resblocks", 5),
+            reduction=mp.get("reduction", 16),
+            scale=scale,
+        )
+        input_key = "lr"
+        ckpt_name = "best_msr_rcan_small_v2_x4.pth"
+        last_name = "last_msr_rcan_small_v2_x4.pth"
     else:
         raise ValueError(f"Unknown model: {model_name}")
 

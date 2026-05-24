@@ -13,18 +13,32 @@
 - Test RGB PSNR: 29.00 → 29.06 dB (+0.06 dB)
 
 **Conclusion**: Multi-scale RCAB is effective but the gain is small.
-The cost-benefit ratio is not great, but the direction is validated.
 
-## Phase 2: MSR-RCAN (MS-RCAN-small + Output Refine Block)
+## Phase 2: MSR-RCAN-small (Multi-Scale RCAB + Output Refine)
+
+### Phase 2a: Simple Refine (3→3, 168 params)
+
+**Status**: COMPLETED - NOT EFFECTIVE
+
+- Test Y+crop PSNR: 30.65 dB (-0.02 vs MS-RCAN-small)
+- Simple 2-layer refine is too weak to make a difference.
+
+### Phase 2b: Deep Refine (3→32→32→3, +11K params)
+
+**Status**: COMPLETED - EFFECTIVE
+
+- Test Y+crop PSNR: **30.81 dB** (+0.14 vs MS-RCAN-small)
+- Test RGB PSNR: 29.18 dB
+- Test RGB SSIM: 0.7772
+- Parameters: 3.36M
+- Deep Refine Block with intermediate channels learns meaningful residual corrections.
+
+**Current best model**: MSR-RCAN-small v2
+
+## Phase 3: DMSR-RCAN-small (Dilated Multi-Scale + Deep Refine)
 
 **Status**: PLANNED
 
-**Goal**: Add a Refine module at the output end of MS-RCAN-small.
-**Expected improvement**: Push Y+crop PSNR toward 30.8~31.0 dB.
-
-**Refine design (TBD)**:
-- Input: SR output from MS-RCAN-small (before final conv)
-- Structure: residual refinement with skip connection
-- Purpose: refine edge details and reduce artifacts
-
-**Target**: Test Y+crop PSNR > 30.67 dB
+**Goal**: Replace 5x5 branch with 3x3 dilation=2 in MSRCAB for larger receptive field with fewer parameters.
+**Keep**: Deep Refine v2 unchanged.
+**Expected improvement**: Push Y+crop PSNR toward 30.90~31.00 dB.

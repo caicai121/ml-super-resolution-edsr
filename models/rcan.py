@@ -184,6 +184,90 @@ class MSRCAN(nn.Module):
         return x
 
 
+class OutputRefineBlock(nn.Module):
+    """Output Refine Block: residual refinement at the output end."""
+
+    def __init__(self, num_channels=3):
+        super().__init__()
+        self.body = nn.Sequential(
+            nn.Conv2d(num_channels, num_channels, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(num_channels, num_channels, kernel_size=3, padding=1),
+        )
+
+    def forward(self, x):
+        return x + self.body(x)
+
+
+class MSRRCAN(nn.Module):
+    """MSR-RCAN: MS-RCAN-small with Output Refine Block."""
+
+    def __init__(self, in_channels=3, out_channels=3, num_features=64,
+                 num_resgroups=3, num_resblocks=5, reduction=16, scale=4):
+        super().__init__()
+        self.backbone = MSRCAN(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            num_features=num_features,
+            num_resgroups=num_resgroups,
+            num_resblocks=num_resblocks,
+            reduction=reduction,
+            scale=scale,
+        )
+        self.refine = OutputRefineBlock(out_channels)
+
+    def forward(self, x):
+        sr_initial = self.backbone(x)
+        sr_final = self.refine(sr_initial)
+        return sr_final
+
+
+class DeepOutputRefineBlock(nn.Module):
+    """Deep Output Refine Block: 3->32->32->3 residual refinement.
+
+    Stronger than simple 2-layer refine, more parameters but still lightweight.
+    """
+
+    def __init__(self, in_channels=3, mid_channels=32):
+        super().__init__()
+        self.body = nn.Sequential(
+            nn.Conv2d(in_channels, mid_channels, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(mid_channels, mid_channels, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(mid_channels, in_channels, kernel_size=3, padding=1),
+        )
+
+    def forward(self, x):
+        return x + self.body(x)
+
+
+class MSRRCANV2(nn.Module):
+    """MSR-RCAN V2: MS-RCAN-small with Deep Output Refine Block.
+
+    Phase 2b: enhanced refine with 3->32->32->3 channels.
+    """
+
+    def __init__(self, in_channels=3, out_channels=3, num_features=64,
+                 num_resgroups=3, num_resblocks=5, reduction=16, scale=4):
+        super().__init__()
+        self.backbone = MSRCAN(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            num_features=num_features,
+            num_resgroups=num_resgroups,
+            num_resblocks=num_resblocks,
+            reduction=reduction,
+            scale=scale,
+        )
+        self.refine = DeepOutputRefineBlock(out_channels, mid_channels=32)
+
+    def forward(self, x):
+        sr_initial = self.backbone(x)
+        sr_final = self.refine(sr_initial)
+        return sr_final
+
+
 def load_pretrained_rcan(ckpt_path, model, device="cpu"):
     """Load pretrained RCAN weights with exact key mapping.
 
