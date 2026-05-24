@@ -150,6 +150,23 @@ def build_model(cfg):
         input_key = "lr"
         ckpt_name = "best_msr_rcan_mid_x4.pth"
         last_name = "last_msr_rcan_mid_x4.pth"
+    elif model_name == "eg_msr_rcan":
+        from models.rcan import EGMSRRCAN
+        mp = cfg.get("model_params", {})
+        model = EGMSRRCAN(
+            in_channels=mp.get("in_channels", 3),
+            out_channels=mp.get("out_channels", 3),
+            num_features=mp.get("num_features", 64),
+            num_resgroups=mp.get("num_resgroups", 5),
+            num_resblocks=mp.get("num_resblocks", 5),
+            reduction=mp.get("reduction", 16),
+            scale=scale,
+            edge_mid_channels=mp.get("edge_mid_channels", 32),
+            edge_num_layers=mp.get("edge_num_layers", 3),
+        )
+        input_key = "lr"
+        ckpt_name = "best_eg_msr_rcan_x4.pth"
+        last_name = "last_eg_msr_rcan_x4.pth"
     else:
         raise ValueError(f"Unknown model: {model_name}")
 

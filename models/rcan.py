@@ -449,3 +449,80 @@ def load_pretrained_rcan(ckpt_path, model, device="cpu"):
             print(f"    {k}: {model_sd[k].shape}")
 
     return model
+# EG-MSR-RCAN classes to append to rcan.py
+
+
+class EdgeBranch(nn.Module):
+    """Edge Feature Extraction Branch.
+
+    Extracts edge structure features from SR_initial image.
+    Uses learnable 3x3 convolutions (not fixed Sobel filters)
+    so the network can learn task-specific edge patterns.
+    """
+
+    def __init__(self, in_channels=3, mid_channels=32, num_layers=3):
+        super().__init__()
+        layers = []
+        layers.append(nn.Conv2d(in_channels, mid_channels, kernel_size=3, padding=1))
+        layers.append(nn.ReLU(inplace=True))
+        for _ in range(num_layers - 2):
+            layers.append(nn.Conv2d(mid_channels, mid_channels, kernel_size=3, padding=1))
+            layers.append(nn.ReLU(inplace=True))
+        layers.append(nn.Conv2d(mid_channels, mid_channels, kernel_size=3, padding=1))
+        self.body = nn.Sequential(*layers)
+
+    def forward(self, x):
+        return self.body(x)
+
+
+class EGMSRRCAN(nn.Module):
+    """EG-MSR-RCAN: Edge-Guided Multi-Scale Refined RCAN.
+
+    Dual-branch architecture:
+    - Main branch: MSR-RCAN backbone (MSRCAB + Deep Refine)
+    - Edge branch: lightweight edge feature extraction from SR_initial
+    - Fusion: concat + 1x1 conv before final refine
+
+    Compared to MSRRCANV2:
+    + Edge Branch for structure-aware reconstruction
+    + Fusion layer before refine
+    Same backbone, same training config
+    """
+
+    def __init__(self, in_channels=3, out_channels=3, num_features=64,
+                 num_resgroups=5, num_resblocks=5, reduction=16, scale=4,
+                 edge_mid_channels=32, edge_num_layers=3):
+        super().__init__()
+        self.scale = scale
+
+        # Main branch: reuse existing MSRCAN backbone
+        self.backbone = MSRCAN(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            num_features=num_features,
+            num_resgroups=num_resgroups,
+            num_resblocks=num_resblocks,
+            reduction=reduction,
+            scale=scale,
+        )
+
+        # Edge branch: extract edge features from SR_initial
+        self.edge_branch = EdgeBranch(
+            in_channels=out_channels,
+            mid_channels=edge_mid_channels,
+            num_layers=edge_num_layers,
+        )
+
+        # Fusion: concat(3 + edge_mid) -> out_channels
+        self.fusion = nn.Conv2d(out_channels + edge_mid_channels, out_channels, kernel_size=1)
+
+        # Final refine
+        self.refine = DeepOutputRefineBlock(out_channels, mid_channels=32)
+
+    def forward(self, x):
+        sr_initial = self.backbone(x)
+        edge_feat = self.edge_branch(sr_initial)
+        fused = torch.cat([sr_initial, edge_feat], dim=1)
+        fused = self.fusion(fused)
+        sr_final = self.refine(fused)
+        return sr_final
