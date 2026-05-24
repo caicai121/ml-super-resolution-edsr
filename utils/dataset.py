@@ -17,12 +17,13 @@ class SRDataset(Dataset):
     - EDSR uses lr as input
     """
 
-    def __init__(self, hr_dir, lr_dir, scale=2, patch_size=None, split="train"):
+    def __init__(self, hr_dir, lr_dir, scale=2, patch_size=None, split="train", augment=False):
         self.hr_dir = Path(hr_dir)
         self.lr_dir = Path(lr_dir)
         self.scale = scale
         self.patch_size = patch_size
         self.split = split
+        self.augment = augment
 
         # Match HR and LR images by filename
         hr_names = sorted([f.name for f in self.hr_dir.glob("*.png")])
@@ -50,6 +51,19 @@ class SRDataset(Dataset):
                 lx * self.scale, ly * self.scale,
                 (lx + lr_patch) * self.scale, (ly + lr_patch) * self.scale
             ))
+
+        # Data augmentation (train only)
+        if self.augment and self.split == "train":
+            if random.random() < 0.5:
+                lr = lr.transpose(Image.FLIP_LEFT_RIGHT)
+                hr = hr.transpose(Image.FLIP_LEFT_RIGHT)
+            if random.random() < 0.5:
+                lr = lr.transpose(Image.FLIP_TOP_BOTTOM)
+                hr = hr.transpose(Image.FLIP_TOP_BOTTOM)
+            if random.random() < 0.5:
+                angle = random.choice([90, 180, 270])
+                lr = lr.rotate(angle, expand=True)
+                hr = hr.rotate(angle, expand=True)
 
         # Bicubic upsample LR to HR size
         hr_w, hr_h = hr.size

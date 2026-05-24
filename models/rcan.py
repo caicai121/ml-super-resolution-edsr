@@ -268,6 +268,87 @@ class MSRRCANV2(nn.Module):
         return sr_final
 
 
+class DilatedMSRCAB(nn.Module):
+    """Dilated Multi-Scale Residual Channel Attention Block.
+
+    Replaces the 5x5 branch with 3x3 dilation=2 for equivalent 5x5 receptive field
+    but fewer parameters (9 vs 25 weights per channel).
+    """
+
+    def __init__(self, num_features, reduction=16):
+        super().__init__()
+        # Multi-scale branches
+        self.branch_1x1 = nn.Conv2d(num_features, num_features, kernel_size=1, padding=0)
+        self.branch_3x3_d1 = nn.Conv2d(num_features, num_features, kernel_size=3, padding=1, dilation=1)
+        self.branch_3x3_d2 = nn.Conv2d(num_features, num_features, kernel_size=3, padding=2, dilation=2)
+        # Fusion
+        self.fusion = nn.Conv2d(num_features * 3, num_features, kernel_size=1, padding=0)
+        # Post-fusion body
+        self.body = nn.Sequential(
+            nn.ReLU(inplace=True),
+            nn.Conv2d(num_features, num_features, kernel_size=3, padding=1),
+            ChannelAttention(num_features, reduction),
+        )
+
+    def forward(self, x):
+        b1 = self.branch_1x1(x)
+        b3 = self.branch_3x3_d1(x)
+        b5 = self.branch_3x3_d2(x)
+        fused = self.fusion(torch.cat([b1, b3, b5], dim=1))
+        return x + self.body(fused)
+
+
+class DMSRRCAN(nn.Module):
+    """DMSR-RCAN: Dilated Multi-Scale RCAN with Deep Refine Block.
+
+    Phase 3: replaces 5x5 in MSRCAB with 3x3 dilation=2.
+    Keeps Deep Output Refine v2.
+    """
+
+    def __init__(self, in_channels=3, out_channels=3, num_features=64,
+                 num_resgroups=3, num_resblocks=5, reduction=16, scale=4):
+        super().__init__()
+        self.scale = scale
+
+        # Head
+        self.head = nn.Conv2d(in_channels, num_features, kernel_size=3, padding=1)
+
+        # Body: residual groups with DilatedMSRCAB
+        body = [ResidualGroup(num_features, num_resblocks, reduction, rcab_class=DilatedMSRCAB)
+                for _ in range(num_resgroups)]
+        body.append(nn.Conv2d(num_features, num_features, kernel_size=3, padding=1))
+        self.body = nn.Sequential(*body)
+
+        # Tail: upsampling + output (identical to RCAN)
+        if scale == 4:
+            self.tail = nn.Sequential(
+                nn.Conv2d(num_features, num_features * 4, kernel_size=3, padding=1),
+                nn.PixelShuffle(2),
+                nn.Conv2d(num_features, num_features * 4, kernel_size=3, padding=1),
+                nn.PixelShuffle(2),
+                nn.Conv2d(num_features, out_channels, kernel_size=3, padding=1),
+            )
+        elif scale == 2:
+            self.tail = nn.Sequential(
+                nn.Conv2d(num_features, num_features * 4, kernel_size=3, padding=1),
+                nn.PixelShuffle(2),
+                nn.Conv2d(num_features, out_channels, kernel_size=3, padding=1),
+            )
+        else:
+            raise ValueError(f"Unsupported scale: {scale}")
+
+        # Deep Refine v2
+        self.refine = DeepOutputRefineBlock(out_channels, mid_channels=32)
+
+    def forward(self, x):
+        x = self.head(x)
+        res = self.body(x)
+        x = x + res
+        sr_initial = self.tail(x)
+        sr_final = self.refine(sr_initial)
+        return sr_final
+
+
 def load_pretrained_rcan(ckpt_path, model, device="cpu"):
     """Load pretrained RCAN weights with exact key mapping.
 

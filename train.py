@@ -120,6 +120,36 @@ def build_model(cfg):
         input_key = "lr"
         ckpt_name = "best_msr_rcan_small_v2_x4.pth"
         last_name = "last_msr_rcan_small_v2_x4.pth"
+    elif model_name == "dmsr_rcan_small":
+        from models.rcan import DMSRRCAN
+        mp = cfg.get("model_params", {})
+        model = DMSRRCAN(
+            in_channels=mp.get("in_channels", 3),
+            out_channels=mp.get("out_channels", 3),
+            num_features=mp.get("num_features", 64),
+            num_resgroups=mp.get("num_resgroups", 3),
+            num_resblocks=mp.get("num_resblocks", 5),
+            reduction=mp.get("reduction", 16),
+            scale=scale,
+        )
+        input_key = "lr"
+        ckpt_name = "best_dmsr_rcan_small_x4.pth"
+        last_name = "last_dmsr_rcan_small_x4.pth"
+    elif model_name == "msr_rcan_mid":
+        from models.rcan import MSRRCANV2
+        mp = cfg.get("model_params", {})
+        model = MSRRCANV2(
+            in_channels=mp.get("in_channels", 3),
+            out_channels=mp.get("out_channels", 3),
+            num_features=mp.get("num_features", 64),
+            num_resgroups=mp.get("num_resgroups", 5),
+            num_resblocks=mp.get("num_resblocks", 5),
+            reduction=mp.get("reduction", 16),
+            scale=scale,
+        )
+        input_key = "lr"
+        ckpt_name = "best_msr_rcan_mid_x4.pth"
+        last_name = "last_msr_rcan_mid_x4.pth"
     else:
         raise ValueError(f"Unknown model: {model_name}")
 
@@ -187,9 +217,10 @@ def main():
     eval_dir.mkdir(parents=True, exist_ok=True)
 
     # Datasets
+    augment = cfg.get("train", {}).get("augment", False)
     train_set = SRDataset(
         cfg["data"]["train_hr"], cfg["data"]["train_lr"],
-        scale=scale, patch_size=patch_size, split="train"
+        scale=scale, patch_size=patch_size, split="train", augment=augment
     )
     val_set = SRDataset(
         cfg["data"]["val_hr"], cfg["data"]["val_lr"],
@@ -215,6 +246,23 @@ def main():
     # Loss and optimizer
     criterion = nn.L1Loss()
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+
+    # Learning rate scheduler
+    scheduler = None
+    scheduler_cfg = cfg.get("train", {}).get("scheduler")
+    if scheduler_cfg == "cosine":
+        min_lr = cfg["train"].get("min_lr", 1e-6)
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer, T_max=epochs, eta_min=min_lr
+        )
+        print(f"Scheduler: CosineAnnealingLR (min_lr={min_lr})")
+    elif scheduler_cfg == "step":
+        step_size = cfg["train"].get("step_size", 20)
+        gamma = cfg["train"].get("gamma", 0.5)
+        scheduler = torch.optim.lr_scheduler.StepLR(
+            optimizer, step_size=step_size, gamma=gamma
+        )
+        print(f"Scheduler: StepLR (step={step_size}, gamma={gamma})")
 
     # Training loop
     best_y_psnr = 0.0
@@ -280,6 +328,10 @@ def main():
                 "model_name": model_name,
             }, save_dir / ckpt_name)
             print(f"  -> New best model saved (Y+crop PSNR: {best_y_psnr:.2f})")
+
+        # Step scheduler
+        if scheduler is not None:
+            scheduler.step()
 
         # Save last
         torch.save({
