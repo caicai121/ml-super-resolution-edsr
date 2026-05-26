@@ -1,0 +1,15 @@
+model,structure,epochs,rgb_psnr,rgb_ssim,y_psnr,y_ssim,params
+Bicubic x4,-,-,-,-,29.75,-,-
+RCAN-small,3g5b,50,-,-,30.60,-,1.56M
+MS-RCAN-small,3g5b+MSRCAB,50,-,-,30.67,-,3.35M
+MSR-RCAN v2,3g5b+MSRCAB+DeepRefine,50,-,-,30.81,-,3.36M
+MSR-RCAN-mid-50,5g5b+MSRCAB+DeepRefine,50,29.31,-,31.01,-,5.37M
+MSR-RCAN-mid-50-cosine,5g5b+MSRCAB+DeepRefine+CosineLR,50,29.54,-,31.15,-,5.37M
+MSR-RCAN-mid-50-cosine-aug,5g5b+MSRCAB+DeepRefine+CosineLR+aug,50,29.41,-,31.00,-,5.37M
+EG-MSR-RCAN,5g5b+MSRCAB+DeepRefine+EdgeBranch+CosineLR,50,29.39,-,31.07,-,5.39M
+EG-MSR-RCAN+EdgeLoss,同上+SobelEdgeLoss,50,29.25,-,30.93,-,5.39M
+AMSR-RCAN-mid-50-cosine,5g5b+AMSRCAB+DeepRefine+CosineLR,50,-,-,31.09,-,5.17M
+RDR-MSR-RCAN-mid-50-cosine,5g5b+MSRCAB+RDRB+CosineLR,50,-,-,31.12,-,5.39M
+MSR-RCAN-large-50-cosine,8g8b+MSRCAB+DeepRefine+CosineLR,50,29.66,0.7904,31.28,0.8220,13.02M
+MSR-RCAN-mid-100,5g5b+MSRCAB+DeepRefine,100,-,-,31.44,-,5.37M
+RCAN-pretrained,-,-,-,-,32.52,-,-

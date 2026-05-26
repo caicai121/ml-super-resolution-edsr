@@ -526,3 +526,183 @@ class EGMSRRCAN(nn.Module):
         fused = self.fusion(fused)
         sr_final = self.refine(fused)
         return sr_final
+
+# AMSR-RCAN classes: Adaptive Multi-Scale fusion
+
+class AMSRCAB(nn.Module):
+    """Adaptive Multi-Scale Residual Channel Attention Block.
+
+    Replaces concat + 1x1 fusion in MSRCAB with adaptive weighted fusion.
+    The model learns per-scale importance weights via GAP + small MLP.
+    """
+
+    def __init__(self, num_features, reduction=16):
+        super().__init__()
+        # Multi-scale branches (same as MSRCAB)
+        self.branch_1x1 = nn.Conv2d(num_features, num_features, kernel_size=1, padding=0)
+        self.branch_3x3 = nn.Conv2d(num_features, num_features, kernel_size=3, padding=1)
+        self.branch_5x5 = nn.Conv2d(num_features, num_features, kernel_size=5, padding=2)
+        # Adaptive scale weight generator
+        self.gap = nn.AdaptiveAvgPool2d(1)
+        self.scale_fc = nn.Sequential(
+            nn.Conv2d(num_features, num_features, kernel_size=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(num_features, 3, kernel_size=1),
+        )
+        # Post-fusion body (same as original RCAB tail)
+        self.body = nn.Sequential(
+            nn.ReLU(inplace=True),
+            nn.Conv2d(num_features, num_features, kernel_size=3, padding=1),
+            ChannelAttention(num_features, reduction),
+        )
+
+    def forward(self, x):
+        b1 = self.branch_1x1(x)
+        b3 = self.branch_3x3(x)
+        b5 = self.branch_5x5(x)
+
+        # Adaptive weight: context -> GAP -> MLP -> softmax -> [B, 3, 1, 1]
+        context = b1 + b3 + b5
+        gap = self.gap(context)
+        scale_weights = self.scale_fc(gap)
+        w = torch.softmax(scale_weights, dim=1)
+
+        # Weighted sum: [B, C, H, W]
+        fused = w[:, 0:1] * b1 + w[:, 1:2] * b3 + w[:, 2:3] * b5
+
+        return x + self.body(fused)
+
+
+class AMSRRCAN(nn.Module):
+    """AMSR-RCAN: Adaptive Multi-Scale Refined RCAN.
+
+    Same architecture as MSRRCANV2, only MSRCAB replaced by AMSRCAB.
+    Head, tail, Deep Refine v2 all identical to MSRRCANV2.
+    """
+
+    def __init__(self, in_channels=3, out_channels=3, num_features=64,
+                 num_resgroups=5, num_resblocks=5, reduction=16, scale=4):
+        super().__init__()
+        self.scale = scale
+
+        # Head
+        self.head = nn.Conv2d(in_channels, num_features, kernel_size=3, padding=1)
+
+        # Body: residual groups with AMSRCAB
+        body = [ResidualGroup(num_features, num_resblocks, reduction, rcab_class=AMSRCAB)
+                for _ in range(num_resgroups)]
+        body.append(nn.Conv2d(num_features, num_features, kernel_size=3, padding=1))
+        self.body = nn.Sequential(*body)
+
+        # Tail: upsampling + output (identical to MSRRCANV2)
+        if scale == 4:
+            self.tail = nn.Sequential(
+                nn.Conv2d(num_features, num_features * 4, kernel_size=3, padding=1),
+                nn.PixelShuffle(2),
+                nn.Conv2d(num_features, num_features * 4, kernel_size=3, padding=1),
+                nn.PixelShuffle(2),
+                nn.Conv2d(num_features, out_channels, kernel_size=3, padding=1),
+            )
+        elif scale == 2:
+            self.tail = nn.Sequential(
+                nn.Conv2d(num_features, num_features * 4, kernel_size=3, padding=1),
+                nn.PixelShuffle(2),
+                nn.Conv2d(num_features, out_channels, kernel_size=3, padding=1),
+            )
+        else:
+            raise ValueError(f"Unsupported scale: {scale}")
+
+        # Deep Refine v2 (same as MSRRCANV2)
+        self.refine = DeepOutputRefineBlock(out_channels, mid_channels=32)
+
+    def forward(self, x):
+        x = self.head(x)
+        res = self.body(x)
+        x = x + res
+        sr_initial = self.tail(x)
+        sr_final = self.refine(sr_initial)
+        return sr_final
+
+
+# RDR-MSR-RCAN classes: Residual Dense Refinement
+
+class RDRB(nn.Module):
+    """Residual Dense Refinement Block.
+
+    Dense connectivity: each layer sees SR_initial + all previous features.
+    Stronger than DeepOutputRefineBlock (sequential convs).
+    """
+
+    def __init__(self, in_channels=3, mid_channels=32):
+        super().__init__()
+        # f1: in_channels -> mid
+        self.conv1 = nn.Conv2d(in_channels, mid_channels, kernel_size=3, padding=1)
+        # f2: in_channels + mid -> mid
+        self.conv2 = nn.Conv2d(in_channels + mid_channels, mid_channels, kernel_size=3, padding=1)
+        # f3: in_channels + 2*mid -> mid
+        self.conv3 = nn.Conv2d(in_channels + 2 * mid_channels, mid_channels, kernel_size=3, padding=1)
+        # fusion: in_channels + 3*mid -> mid
+        self.fusion = nn.Conv2d(in_channels + 3 * mid_channels, mid_channels, kernel_size=1)
+        # residual: mid -> in_channels
+        self.residual = nn.Conv2d(mid_channels, in_channels, kernel_size=3, padding=1)
+        self.relu = nn.ReLU(inplace=True)
+
+    def forward(self, x):
+        f1 = self.relu(self.conv1(x))
+        f2 = self.relu(self.conv2(torch.cat([x, f1], dim=1)))
+        f3 = self.relu(self.conv3(torch.cat([x, f1, f2], dim=1)))
+        fused = self.relu(self.fusion(torch.cat([x, f1, f2, f3], dim=1)))
+        residual = self.residual(fused)
+        return x + residual
+
+
+class RDRMSRRCAN(nn.Module):
+    """RDR-MSR-RCAN: MSR-RCAN-mid with Residual Dense Refinement Block.
+
+    Same backbone as MSRRCANV2 (MSRCAB + Deep Refine v2),
+    but replaces DeepOutputRefineBlock with RDRB.
+    """
+
+    def __init__(self, in_channels=3, out_channels=3, num_features=64,
+                 num_resgroups=5, num_resblocks=5, reduction=16, scale=4):
+        super().__init__()
+        self.scale = scale
+
+        # Head
+        self.head = nn.Conv2d(in_channels, num_features, kernel_size=3, padding=1)
+
+        # Body: residual groups with MSRCAB (original concat+1x1 fusion)
+        body = [ResidualGroup(num_features, num_resblocks, reduction, rcab_class=MSRCAB)
+                for _ in range(num_resgroups)]
+        body.append(nn.Conv2d(num_features, num_features, kernel_size=3, padding=1))
+        self.body = nn.Sequential(*body)
+
+        # Tail: upsampling + output (identical to MSRRCANV2)
+        if scale == 4:
+            self.tail = nn.Sequential(
+                nn.Conv2d(num_features, num_features * 4, kernel_size=3, padding=1),
+                nn.PixelShuffle(2),
+                nn.Conv2d(num_features, num_features * 4, kernel_size=3, padding=1),
+                nn.PixelShuffle(2),
+                nn.Conv2d(num_features, out_channels, kernel_size=3, padding=1),
+            )
+        elif scale == 2:
+            self.tail = nn.Sequential(
+                nn.Conv2d(num_features, num_features * 4, kernel_size=3, padding=1),
+                nn.PixelShuffle(2),
+                nn.Conv2d(num_features, out_channels, kernel_size=3, padding=1),
+            )
+        else:
+            raise ValueError(f"Unsupported scale: {scale}")
+
+        # RDRB (replaces Deep Refine v2)
+        self.refine = RDRB(out_channels, mid_channels=32)
+
+    def forward(self, x):
+        x = self.head(x)
+        res = self.body(x)
+        x = x + res
+        sr_initial = self.tail(x)
+        sr_final = self.refine(sr_initial)
+        return sr_final
+

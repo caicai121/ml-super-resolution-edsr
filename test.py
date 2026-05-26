@@ -157,6 +157,51 @@ def build_model(cfg):
         )
         input_key = "lr"
         ckpt_default = "best_eg_msr_rcan_x4.pth"
+    elif model_name == "amsr_rcan_mid":
+        from models.rcan import AMSRRCAN
+        mp = cfg.get("model_params", {})
+        model = AMSRRCAN(
+            in_channels=mp.get("in_channels", 3),
+            out_channels=mp.get("out_channels", 3),
+            num_features=mp.get("num_features", 64),
+            num_resgroups=mp.get("num_resgroups", 5),
+            num_resblocks=mp.get("num_resblocks", 5),
+            reduction=mp.get("reduction", 16),
+            scale=scale,
+        )
+        input_key = "lr"
+        ckpt_default = "best_amsr_rcan_mid_x4.pth"
+    elif model_name == "rdr_msr_rcan_mid":
+        from models.rcan import RDRMSRRCAN
+        mp = cfg.get("model_params", {})
+        model = RDRMSRRCAN(
+            in_channels=mp.get("in_channels", 3),
+            out_channels=mp.get("out_channels", 3),
+            num_features=mp.get("num_features", 64),
+            num_resgroups=mp.get("num_resgroups", 5),
+            num_resblocks=mp.get("num_resblocks", 5),
+            reduction=mp.get("reduction", 16),
+            scale=scale,
+        )
+        input_key = "lr"
+        ckpt_default = "best_rdr_msr_rcan_mid_x4.pth"
+    elif model_name == "msr_rcan_large":
+        from models.rcan import MSRRCANV2
+        mp = cfg.get("model_params", {})
+        model = MSRRCANV2(
+            in_channels=mp.get("in_channels", 3),
+            out_channels=mp.get("out_channels", 3),
+            num_features=mp.get("num_features", 64),
+            num_resgroups=mp.get("num_resgroups", 8),
+            num_resblocks=mp.get("num_resblocks", 8),
+            reduction=mp.get("reduction", 16),
+            scale=scale,
+        )
+        input_key = "lr"
+        ckpt_default = "best_msr_rcan_large50_cosine_x4.pth"
+
+
+
 
     else:
         raise ValueError(f"Unknown model: {model_name}")

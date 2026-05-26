@@ -1,0 +1,40 @@
+# AMSR-RCAN-mid-50-cosine x4 training
+# Adaptive Multi-Scale fusion (AMSRCAB) + Deep Refine v2
+# Fair comparison target: msr_rcan_mid50_cosine (31.15 dB Y+crop)
+model: amsr_rcan_mid
+scale: 4
+
+model_params:
+  in_channels: 3
+  out_channels: 3
+  num_features: 64
+  num_resgroups: 5
+  num_resblocks: 5
+  reduction: 16
+
+data:
+  train_hr: data_final/ucmerced_selected/train/HR
+  train_lr: data_final/ucmerced_selected/train/LR_x4
+  val_hr: data_final/ucmerced_selected/val/HR
+  val_lr: data_final/ucmerced_selected/val/LR_x4
+  test_hr: data_final/ucmerced_selected/test/HR
+  test_lr: data_final/ucmerced_selected/test/LR_x4
+
+train:
+  epochs: 50
+  batch_size: 8
+  patch_size: 128
+  lr: 2.0e-4
+  num_workers: 4
+  save_dir: checkpoints/amsr_rcan_mid50_cosine_x4
+  loss: l1
+  optimizer: adam
+  scheduler: cosine
+  min_lr: 1.0e-6
+  augment: false
+
+eval:
+  save_dir: results/amsr_rcan_mid50_cosine_x4
+  compare_dir: results/amsr_rcan_mid50_cosine_x4/comparisons
+  crop_border: 4
+  test_y_channel: true

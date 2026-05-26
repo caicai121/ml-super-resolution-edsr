@@ -1,0 +1,45 @@
+MSR-RCAN-large-50-cosine 容量扩展实验汇报
+==================================================
+
+1. 模型结构
+   - 与 MSR-RCAN-mid 的区别: num_resgroups 5→8, num_resblocks 5→8
+   - 沿用 MSRCAB (concat+1x1 fusion)
+   - 沿用 Deep Refine v2
+   - 未加 Edge Loss / Edge Branch / AMSRCAB
+
+2. 参数量
+   - MSR-RCAN-mid: 5,366,826
+   - MSR-RCAN-large: 13,020,678
+   - 增加: +7,653,852 (+142.6%)
+   - batch_size: 8 (无 OOM)
+
+3. 训练设置
+   - epochs: 50
+   - lr: 2e-4 → 1e-6 (Cosine)
+   - batch_size: 8, patch_size: 128
+   - loss: L1
+   - best metric: val Y+crop PSNR
+
+4. 验证结果
+   - best epoch: 48
+   - best val RGB: 29.32 dB
+   - best val Y+crop: 30.91 dB
+
+5. 测试结果 (70 张 selected test set)
+   - RGB PSNR: 29.66 dB
+   - RGB SSIM: 0.7904
+   - Y+crop PSNR: 31.28 dB
+   - Y+crop SSIM: 0.8220
+
+6. 对比
+   - MSR-RCAN-mid-50: 31.01 dB
+   - MSR-RCAN-mid-50-cosine: 31.15 dB (baseline)
+   - MSR-RCAN-large-50-cosine: 31.28 dB (+0.13 dB)
+   - MSR-RCAN-mid-100: 31.44 dB
+
+7. 结论
+   - 增大模型容量在 50 epoch 条件下有效 (+0.13 dB)
+   - 参数量增加 142.6%，PSNR 提升 0.13 dB
+   - 性能提升有效，但参数效率不如 mid 模型
+   - 当前 50 epoch 最优: MSR-RCAN-large-50-cosine
+   - 轻量高效版: MSR-RCAN-mid-50-cosine (31.15 dB, 5.37M)
