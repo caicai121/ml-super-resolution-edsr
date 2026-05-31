@@ -1,0 +1,7 @@
+model,stage2_blocks,modification,y_psnr_y,rgb_psnr,delta_vs_baseline,conclusion
+MSR-RCAN-large (baseline),0,none,31.28,29.66,0.00,baseline
+Cascade-6,6,basic cascade,31.35,29.72,+0.07,effective
+Cascade-10,10,basic cascade,31.40,29.77,+0.12,BEST
+BP-Cascade,6,back-projection error,31.34,29.72,+0.06,no improvement vs Cascade-6
+Gated-Cascade-10,10,GateNet spatial gating,31.37,29.74,+0.09,gate suppresses useful residual
+Learnable-Scale-Cascade-10,10,learnable alpha (0.1->0.1048),31.39,29.76,+0.11,fixed 0.1 near optimal

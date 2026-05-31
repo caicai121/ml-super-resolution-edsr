@@ -1,8 +1,12 @@
 model,y_psnr_y,rgb_psnr,rgb_ssim,params_m,epochs,notes
-Bicubic x4,29.75,28.04,,,,"baseline upsample"
+Bicubic x4,29.75,28.04,,,,baseline upsample
 RCAN-small,30.60,29.04,,1.56,50,3g5b pretrained
 MSR-RCAN-mid-50-cosine,31.15,29.54,,5.37,50,5g5b+MSRCAB+Deep Refine+Cosine LR
-MSR-RCAN-large-50-cosine,31.28,29.66,,13.02,50,8g8b+MSRCAB+Deep Refine+Cosine LR (CURRENT BEST 50e)
-GC-MSR-RCAN-large,31.22,29.59,0.7880,13.02,50,Global Context Block (INEFFECTIVE)
+MSR-RCAN-large-50-cosine,31.28,29.66,,13.02,50,8g8b+MSRCAB+Deep Refine+Cosine LR
 MSR-RCAN-mid-100,31.44,,,5.37,100,extended training reference
+Cascade-MSR-RCAN-large-6,31.35,29.72,,13.67,50,Stage2 ResBlock x6
+Cascade-MSR-RCAN-large-10,31.40,29.77,,13.76,50,Stage2 ResBlock x10 (BEST 50e)
+BP-Cascade-MSR-RCAN-large,31.34,29.72,,13.47,50,Back-Projection error feedback
+Gated-Cascade-MSR-RCAN-large-10,31.37,29.74,,13.77,50,GateNet spatial gating
+Learnable-Scale-Cascade-10,31.39,29.76,,13.76,50,Learnable alpha=0.1048
 RCAN-pretrained,32.52,30.48,,15.59,,public pretrained weights

@@ -7,6 +7,7 @@ Paper: "Image Super-Resolution Using Very Deep Residual Channel Attention Networ
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 
 class ChannelAttention(nn.Module):
@@ -869,4 +870,226 @@ class CascadeMSRRCAN(nn.Module):
         sr_initial = self.backbone(x)
         sr_stage1 = self.refine(sr_initial)
         sr_final = self.cascade(sr_stage1)
+        return sr_final
+
+
+
+class BPCascadeCorrectionNet(nn.Module):
+    """Back-Projection Cascade Correction Network (Stage 2).
+
+    Input: concat(SR_stage1, HR_error) [B, 6, H, W]
+    Output: correction [B, 3, H, W]
+
+    SR_final = SR_stage1 + residual_scale * correction
+    """
+
+    def __init__(self, in_channels=6, out_channels=3, mid_channels=64,
+                 num_blocks=6, residual_scale=0.1):
+        super().__init__()
+        self.residual_scale = residual_scale
+
+        self.entry = nn.Sequential(
+            nn.Conv2d(in_channels, mid_channels, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+        )
+
+        self.blocks = nn.Sequential(
+            *[BasicResidualBlock(mid_channels, res_scale=0.1)
+              for _ in range(num_blocks)]
+        )
+
+        self.exit_conv = nn.Conv2d(mid_channels, out_channels, kernel_size=3, padding=1)
+
+    def forward(self, sr_stage1, hr_error):
+        x = torch.cat([sr_stage1, hr_error], dim=1)  # [B, 6, H, W]
+        feat = self.entry(x)
+        feat = self.blocks(feat)
+        correction = self.exit_conv(feat)
+        return sr_stage1 + self.residual_scale * correction
+
+
+class BPCascadeMSRRCAN(nn.Module):
+    """BP-Cascade-MSR-RCAN: Back-Projection Cascade Residual Correction.
+
+    Stage 1: MSR-RCAN-large backbone + Deep Refine v2
+    Stage 2: BP Cascade Correction with LR consistency error
+
+    Flow:
+    LR -> backbone -> SR_stage1
+    LR_recon = bicubic_downsample(SR_stage1, scale=4)
+    LR_error = LR - LR_recon
+    HR_error = bicubic_upsample(LR_error, scale=4)
+    SR_final = BPCascadeCorrectionNet(SR_stage1, HR_error)
+    """
+
+    def __init__(self, in_channels=3, out_channels=3, num_features=64,
+                 num_resgroups=8, num_resblocks=8, reduction=16, scale=4,
+                 cascade_num_blocks=6, cascade_mid_channels=64,
+                 cascade_residual_scale=0.1):
+        super().__init__()
+        self.scale = scale
+
+        # Stage 1
+        self.backbone = MSRCAN(
+            in_channels=in_channels, out_channels=out_channels,
+            num_features=num_features, num_resgroups=num_resgroups,
+            num_resblocks=num_resblocks, reduction=reduction, scale=scale,
+        )
+        self.refine = DeepOutputRefineBlock(out_channels, mid_channels=32)
+
+        # Stage 2: BP Cascade (6 channels input: SR_stage1 + HR_error)
+        self.cascade = BPCascadeCorrectionNet(
+            in_channels=out_channels * 2,
+            out_channels=out_channels,
+            mid_channels=cascade_mid_channels,
+            num_blocks=cascade_num_blocks,
+            residual_scale=cascade_residual_scale,
+        )
+
+    def forward(self, x):
+        # Stage 1
+        sr_initial = self.backbone(x)
+        sr_stage1 = self.refine(sr_initial)
+
+        # Back-projection: compute LR consistency error
+        lr_recon = F.interpolate(sr_stage1, scale_factor=1.0/self.scale,
+                                 mode='bicubic', align_corners=False,
+                                 recompute_scale_factor=False)
+        lr_error = x - lr_recon
+        hr_error = F.interpolate(lr_error, scale_factor=self.scale,
+                                 mode='bicubic', align_corners=False,
+                                 recompute_scale_factor=False)
+
+        # Stage 2: BP Cascade correction
+        sr_final = self.cascade(sr_stage1, hr_error)
+        return sr_final
+
+
+
+class GateNet(nn.Module):
+    """Gate network for gated cascade correction.
+
+    Input: concat(SR_stage1, residual_stage2) [B, 6, H, W]
+    Output: gate [B, 3, H, W] in range [0, 1]
+    """
+
+    def __init__(self, in_channels=6, out_channels=3, mid_channels=32):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Conv2d(in_channels, mid_channels, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(mid_channels, mid_channels // 2, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(mid_channels // 2, out_channels, kernel_size=3, padding=1),
+            nn.Sigmoid(),
+        )
+
+    def forward(self, x):
+        return self.net(x)
+
+
+class GatedCascadeMSRRCAN(nn.Module):
+    """Gated-Cascade-MSR-RCAN: Cascade with learned gating.
+
+    Stage 1: MSR-RCAN-large backbone + Deep Refine v2
+    Stage 2: Cascade Residual Correction with GateNet
+
+    SR_final = SR_stage1 + gate * residual_scale * residual_stage2
+    """
+
+    def __init__(self, in_channels=3, out_channels=3, num_features=64,
+                 num_resgroups=8, num_resblocks=8, reduction=16, scale=4,
+                 cascade_num_blocks=10, cascade_mid_channels=64,
+                 cascade_residual_scale=0.1):
+        super().__init__()
+        self.scale = scale
+
+        # Stage 1: MSR-RCAN-large backbone + Deep Refine v2
+        self.backbone = MSRCAN(
+            in_channels=in_channels, out_channels=out_channels,
+            num_features=num_features, num_resgroups=num_resgroups,
+            num_resblocks=num_resblocks, reduction=reduction, scale=scale,
+        )
+        self.refine = DeepOutputRefineBlock(out_channels, mid_channels=32)
+
+        # Stage 2: Cascade Residual Correction (reuse existing class)
+        self.cascade = CascadeResidualCorrectionNet(
+            in_channels=out_channels,
+            mid_channels=cascade_mid_channels,
+            num_blocks=cascade_num_blocks,
+            residual_scale=cascade_residual_scale,
+        )
+
+        # GateNet: decides per-pixel correction strength
+        self.gate = GateNet(
+            in_channels=out_channels * 2,
+            out_channels=out_channels,
+            mid_channels=32,
+        )
+
+    def forward(self, x):
+        # Stage 1
+        sr_initial = self.backbone(x)
+        sr_stage1 = self.refine(sr_initial)
+
+        # Get residual from cascade (before adding to sr_stage1)
+        feat = self.cascade.entry(sr_stage1)
+        feat = self.cascade.blocks(feat)
+        residual_stage2 = self.cascade.exit_conv(feat)
+
+        # Gate: concat sr_stage1 and residual, predict gate
+        gate_input = torch.cat([sr_stage1, residual_stage2], dim=1)
+        gate = self.gate(gate_input)
+
+        # Gated correction
+        sr_final = sr_stage1 + gate * self.cascade.residual_scale * residual_stage2
+        return sr_final
+
+
+
+class LearnableScaleCascadeMSRRCAN(nn.Module):
+    """Learnable-Scale Cascade-MSR-RCAN.
+
+    Same as CascadeMSRRCAN but with learnable residual scale alpha.
+    SR_final = SR_stage1 + alpha * residual_stage2
+    alpha initialized to 0.1, learned freely.
+    """
+
+    def __init__(self, in_channels=3, out_channels=3, num_features=64,
+                 num_resgroups=8, num_resblocks=8, reduction=16, scale=4,
+                 cascade_num_blocks=10, cascade_mid_channels=64,
+                 cascade_residual_scale=0.1):
+        super().__init__()
+        self.scale = scale
+
+        # Stage 1
+        self.backbone = MSRCAN(
+            in_channels=in_channels, out_channels=out_channels,
+            num_features=num_features, num_resgroups=num_resgroups,
+            num_resblocks=num_resblocks, reduction=reduction, scale=scale,
+        )
+        self.refine = DeepOutputRefineBlock(out_channels, mid_channels=32)
+
+        # Stage 2: Cascade (uses fixed residual_scale internally for ResBlocks)
+        self.cascade = CascadeResidualCorrectionNet(
+            in_channels=out_channels,
+            mid_channels=cascade_mid_channels,
+            num_blocks=cascade_num_blocks,
+            residual_scale=cascade_residual_scale,
+        )
+
+        # Learnable alpha: controls overall correction strength
+        self.residual_alpha = nn.Parameter(torch.tensor(float(cascade_residual_scale)))
+
+    def forward(self, x):
+        sr_initial = self.backbone(x)
+        sr_stage1 = self.refine(sr_initial)
+
+        # Get raw residual from cascade (bypass cascade's internal scaling)
+        feat = self.cascade.entry(sr_stage1)
+        feat = self.cascade.blocks(feat)
+        residual_stage2 = self.cascade.exit_conv(feat)
+
+        # Apply learnable alpha
+        sr_final = sr_stage1 + self.residual_alpha * residual_stage2
         return sr_final

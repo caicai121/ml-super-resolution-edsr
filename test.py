@@ -230,6 +230,57 @@ def build_model(cfg):
         )
         input_key = "lr"
         ckpt_default = "best_cascade_msr_rcan_large50_cosine_x4.pth"
+    elif model_name == "bp_cascade_msr_rcan_large":
+        from models.rcan import BPCascadeMSRRCAN
+        mp = cfg.get("model_params", {})
+        model = BPCascadeMSRRCAN(
+            in_channels=mp.get("in_channels", 3),
+            out_channels=mp.get("out_channels", 3),
+            num_features=mp.get("num_features", 64),
+            num_resgroups=mp.get("num_resgroups", 8),
+            num_resblocks=mp.get("num_resblocks", 8),
+            reduction=mp.get("reduction", 16),
+            scale=scale,
+            cascade_num_blocks=mp.get("cascade_num_blocks", 6),
+            cascade_mid_channels=mp.get("cascade_mid_channels", 64),
+            cascade_residual_scale=mp.get("cascade_residual_scale", 0.1),
+        )
+        input_key = "lr"
+        ckpt_default = "best_bp_cascade_msr_rcan_large50_cosine_x4.pth"
+    elif model_name == "gated_cascade_msr_rcan_large":
+        from models.rcan import GatedCascadeMSRRCAN
+        mp = cfg.get("model_params", {})
+        model = GatedCascadeMSRRCAN(
+            in_channels=mp.get("in_channels", 3),
+            out_channels=mp.get("out_channels", 3),
+            num_features=mp.get("num_features", 64),
+            num_resgroups=mp.get("num_resgroups", 8),
+            num_resblocks=mp.get("num_resblocks", 8),
+            reduction=mp.get("reduction", 16),
+            scale=scale,
+            cascade_num_blocks=mp.get("cascade_num_blocks", 10),
+            cascade_mid_channels=mp.get("cascade_mid_channels", 64),
+            cascade_residual_scale=mp.get("cascade_residual_scale", 0.1),
+        )
+        input_key = "lr"
+        ckpt_default = "best_gated_cascade_msr_rcan_large_s10_50_cosine_x4.pth"
+    elif model_name == "learnable_scale_cascade_msr_rcan_large":
+        from models.rcan import LearnableScaleCascadeMSRRCAN
+        mp = cfg.get("model_params", {})
+        model = LearnableScaleCascadeMSRRCAN(
+            in_channels=mp.get("in_channels", 3),
+            out_channels=mp.get("out_channels", 3),
+            num_features=mp.get("num_features", 64),
+            num_resgroups=mp.get("num_resgroups", 8),
+            num_resblocks=mp.get("num_resblocks", 8),
+            reduction=mp.get("reduction", 16),
+            scale=scale,
+            cascade_num_blocks=mp.get("cascade_num_blocks", 10),
+            cascade_mid_channels=mp.get("cascade_mid_channels", 64),
+            cascade_residual_scale=mp.get("cascade_residual_scale", 0.1),
+        )
+        input_key = "lr"
+        ckpt_default = "best_learnable_scale_cascade_msr_rcan_large_s10_50_cosine_x4.pth"
 
 
 

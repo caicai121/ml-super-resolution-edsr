@@ -1,0 +1,44 @@
+# Cascade-MSR-RCAN-large-50-cosine x4 training
+# MSR-RCAN-large + Cascade Residual Correction Network (Stage 2)
+# Target: push beyond 31.28 dB with two-stage residual learning
+model: cascade_msr_rcan_large
+scale: 4
+
+model_params:
+  in_channels: 3
+  out_channels: 3
+  num_features: 64
+  num_resgroups: 8
+  num_resblocks: 8
+  reduction: 16
+  # Stage 2 cascade params
+  cascade_num_blocks: 6
+  cascade_mid_channels: 64
+  cascade_residual_scale: 0.1
+
+data:
+  train_hr: data_final/ucmerced_selected/train/HR
+  train_lr: data_final/ucmerced_selected/train/LR_x4
+  val_hr: data_final/ucmerced_selected/val/HR
+  val_lr: data_final/ucmerced_selected/val/LR_x4
+  test_hr: data_final/ucmerced_selected/test/HR
+  test_lr: data_final/ucmerced_selected/test/LR_x4
+
+train:
+  epochs: 50
+  batch_size: 8
+  patch_size: 128
+  lr: 2.0e-4
+  num_workers: 4
+  save_dir: checkpoints/cascade_msr_rcan_large50_cosine_x4
+  loss: l1
+  optimizer: adam
+  scheduler: cosine
+  min_lr: 1.0e-6
+  augment: false
+
+eval:
+  save_dir: results/cascade_msr_rcan_large50_cosine_x4
+  compare_dir: results/cascade_msr_rcan_large50_cosine_x4/comparisons
+  crop_border: 4
+  test_y_channel: true
