@@ -37,11 +37,18 @@
 
 ## Phase 3: DMSR-RCAN-small (Dilated Multi-Scale + Deep Refine)
 
-**Status**: PLANNED
+**Status**: COMPLETED - NOT EFFECTIVE
 
-**Goal**: Replace 5x5 branch with 3x3 dilation=2 in MSRCAB for larger receptive field with fewer parameters.
+**What changed**: Replace 5x5 branch with 3x3 dilation=2 in MSRCAB for larger receptive field with fewer parameters.
 **Keep**: Deep Refine v2 unchanged.
-**Expected improvement**: Push Y+crop PSNR toward 30.90~31.00 dB.
+
+**Results**:
+- DMSR-RCAN: Y+crop 30.77 dB (vs MSR-RCAN-v2 30.81 dB, -0.04)
+- Parameters: 2.38M (reduced from 3.36M)
+- Dilated 3x3(d=2) achieves similar receptive field to 5x5 with fewer params, but slight performance drop
+
+**Conclusion**: Dilated convolution reduces parameters but does not improve performance.
+Not effective for this task. MSRCAB with 5x5 branch retained.
 
 ## Phase 4: Capacity & Training Strategy Experiments
 

@@ -45,12 +45,12 @@ Y+crop 是超分辨率领域的标准评价方式，排除边界插值误差，�
 
 | 方法 | Y+crop PSNR | RGB PSNR | 参数量 | 说明 |
 |------|-------------|----------|--------|------|
-| Bicubic ×4 | 28.81 | 27.41 | — | 基线上采样 |
+| Bicubic ×4 | 29.75 | 28.04 | — | 基线上采样 |
 | RCAN-small | 30.60 | 29.00 | 1.56M | 3g5b 从零训练 |
 | MSR-RCAN-mid | 31.15 | 29.54 | 5.37M | 5g5b + MSRCAB + Deep Refine + Cosine |
 | MSR-RCAN-large | 31.28 | 29.66 | 13.02M | 8g8b + MSRCAB + Deep Refine + Cosine |
 | **Cascade-10（最优 50e）** | **31.40** | **29.77** | **13.76M** | **Stage2 ResBlock ×10 + 残差级联** |
-| RCAN-pretrained | 32.08 | 30.48 | 15.59M | 公开预训练权重（参考） |
+| RCAN-pretrained | 32.52 | 30.48 | 15.59M | 公开预训练权重（参考） |
 
 ### Cascade 消融实验
 
@@ -69,11 +69,13 @@ Y+crop 是超分辨率领域的标准评价方式，排除边界插值误差，�
 
 | 实验方向 | 结果 | 结论 |
 |----------|------|------|
+| Edge Branch (EG-MSR-RCAN) | 31.07 dB (-0.08) | 边缘分支特征冗余 |
+| Edge Branch + Edge Loss | 30.93 dB (-0.22) | 边缘损失破坏像素精度 |
+| AMSRCAB 自适应多尺度 | 31.09 dB (-0.06) | 与 MSRCAB 功能重叠 |
+| RDRB 密集细化模块 | 31.12 dB (-0.03) | 容量不足 |
 | Teacher Distillation (α=0.1) | 31.16 dB (-0.12) | 师生结构分布不匹配 |
 | Global Context Block | 31.22 dB (-0.06) | 空间注意力无额外收益 |
-| Edge Branch + Edge Loss | 31.22 dB (-0.06) | 边缘监督干扰主任务 |
-| AMSRCAB 多尺度注意力 | 31.22 dB (-0.06) | 与 MSRCAB 功能重叠 |
-| RDRB 递归残差 | 31.25 dB (-0.03) | 容量不足 |
+| DMSR-RCAN (Dilated) | 30.77 dB (-0.04) | 参数减少但性能下降 |
 
 ### 消融小结
 
