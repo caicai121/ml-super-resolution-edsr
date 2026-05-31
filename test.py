@@ -199,6 +199,37 @@ def build_model(cfg):
         )
         input_key = "lr"
         ckpt_default = "best_msr_rcan_large50_cosine_x4.pth"
+    elif model_name == "gc_msr_rcan_large":
+        from models.rcan import GCMSRRCAN
+        mp = cfg.get("model_params", {})
+        model = GCMSRRCAN(
+            in_channels=mp.get("in_channels", 3),
+            out_channels=mp.get("out_channels", 3),
+            num_features=mp.get("num_features", 64),
+            num_resgroups=mp.get("num_resgroups", 8),
+            num_resblocks=mp.get("num_resblocks", 8),
+            reduction=mp.get("reduction", 16),
+            scale=scale,
+        )
+        input_key = "lr"
+        ckpt_default = "best_gc_msr_rcan_large50_cosine_x4.pth"
+    elif model_name == "cascade_msr_rcan_large":
+        from models.rcan import CascadeMSRRCAN
+        mp = cfg.get("model_params", {})
+        model = CascadeMSRRCAN(
+            in_channels=mp.get("in_channels", 3),
+            out_channels=mp.get("out_channels", 3),
+            num_features=mp.get("num_features", 64),
+            num_resgroups=mp.get("num_resgroups", 8),
+            num_resblocks=mp.get("num_resblocks", 8),
+            reduction=mp.get("reduction", 16),
+            scale=scale,
+            cascade_num_blocks=mp.get("cascade_num_blocks", 6),
+            cascade_mid_channels=mp.get("cascade_mid_channels", 64),
+            cascade_residual_scale=mp.get("cascade_residual_scale", 0.1),
+        )
+        input_key = "lr"
+        ckpt_default = "best_cascade_msr_rcan_large50_cosine_x4.pth"
 
 
 

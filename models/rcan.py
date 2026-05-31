@@ -706,3 +706,167 @@ class RDRMSRRCAN(nn.Module):
         sr_final = self.refine(sr_initial)
         return sr_final
 
+
+
+class GlobalContextBlock(nn.Module):
+    """Global Context Block for spatial context aggregation."""
+
+    def __init__(self, channels, reduction=4):
+        super().__init__()
+        self.mask_conv = nn.Conv2d(channels, 1, kernel_size=1)
+        self.transform = nn.Sequential(
+            nn.Conv2d(channels, channels // reduction, kernel_size=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(channels // reduction, channels, kernel_size=1),
+        )
+
+    def forward(self, x):
+        B, C, H, W = x.shape
+        mask = self.mask_conv(x)
+        mask = mask.view(B, 1, -1)
+        mask = torch.softmax(mask, dim=-1)
+        mask = mask.view(B, 1, H, W)
+        context = (x * mask).sum(dim=(2, 3), keepdim=True)
+        context = self.transform(context)
+        return x + context
+
+
+class GlobalContextRefineBlock(nn.Module):
+    """Global Context Refine Block for SR images."""
+
+    def __init__(self, in_channels=3, mid_channels=32, gc_reduction=4):
+        super().__init__()
+        self.up = nn.Sequential(
+            nn.Conv2d(in_channels, mid_channels, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+        )
+        self.gc = GlobalContextBlock(mid_channels, reduction=gc_reduction)
+        self.down = nn.Conv2d(mid_channels, in_channels, kernel_size=3, padding=1)
+
+    def forward(self, x):
+        feat = self.up(x)
+        feat = self.gc(feat)
+        residual = self.down(feat)
+        return x + residual
+
+
+class GCMSRRCAN(nn.Module):
+    """GC-MSR-RCAN: MSR-RCAN-large + Global Context Block."""
+
+    def __init__(self, in_channels=3, out_channels=3, num_features=64,
+                 num_resgroups=8, num_resblocks=8, reduction=16, scale=4):
+        super().__init__()
+        self.scale = scale
+        self.backbone = MSRCAN(
+            in_channels=in_channels, out_channels=out_channels,
+            num_features=num_features, num_resgroups=num_resgroups,
+            num_resblocks=num_resblocks, reduction=reduction, scale=scale,
+        )
+        self.gc_refine = GlobalContextRefineBlock(
+            in_channels=out_channels, mid_channels=32, gc_reduction=4
+        )
+        self.refine = DeepOutputRefineBlock(out_channels, mid_channels=32)
+
+    def forward(self, x):
+        sr_initial = self.backbone(x)
+        sr_gc = self.gc_refine(sr_initial)
+        sr_final = self.refine(sr_gc)
+        return sr_final
+
+
+
+class BasicResidualBlock(nn.Module):
+    """Basic residual block: Conv3x3 -> ReLU -> Conv3x3 + residual.
+
+    Internal residual scaling 0.1 for stable training.
+    """
+
+    def __init__(self, channels, res_scale=0.1):
+        super().__init__()
+        self.res_scale = res_scale
+        self.body = nn.Sequential(
+            nn.Conv2d(channels, channels, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(channels, channels, kernel_size=3, padding=1),
+        )
+
+    def forward(self, x):
+        return x + self.res_scale * self.body(x)
+
+
+class CascadeResidualCorrectionNet(nn.Module):
+    """Stage 2: Cascade Residual Correction Network.
+
+    Learns the residual error between SR_stage1 and HR.
+    Input: SR_stage1 [B, 3, H, W]
+    Output: residual_stage2 [B, 3, H, W]
+
+    Structure: 3->64, ResBlock x N, 64->3
+    Final: SR_final = SR_stage1 + stage2_residual_scale * residual
+    """
+
+    def __init__(self, in_channels=3, mid_channels=64,
+                 num_blocks=6, residual_scale=0.1):
+        super().__init__()
+        self.residual_scale = residual_scale
+
+        # Entry conv
+        self.entry = nn.Sequential(
+            nn.Conv2d(in_channels, mid_channels, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+        )
+
+        # Residual blocks
+        self.blocks = nn.Sequential(
+            *[BasicResidualBlock(mid_channels, res_scale=0.1)
+              for _ in range(num_blocks)]
+        )
+
+        # Exit conv
+        self.exit_conv = nn.Conv2d(mid_channels, in_channels, kernel_size=3, padding=1)
+
+    def forward(self, x):
+        feat = self.entry(x)
+        feat = self.blocks(feat)
+        residual = self.exit_conv(feat)
+        return x + self.residual_scale * residual
+
+
+class CascadeMSRRCAN(nn.Module):
+    """Cascade-MSR-RCAN: MSR-RCAN-large + Cascade Residual Correction.
+
+    Stage 1: MSR-RCAN-large backbone (MSRCAB + Deep Refine v2)
+    Stage 2: CascadeResidualCorrectionNet learns residual error
+
+    Flow:
+    LR -> backbone -> SR_stage1 -> Cascade Correction -> SR_final
+    """
+
+    def __init__(self, in_channels=3, out_channels=3, num_features=64,
+                 num_resgroups=8, num_resblocks=8, reduction=16, scale=4,
+                 cascade_num_blocks=6, cascade_mid_channels=64,
+                 cascade_residual_scale=0.1):
+        super().__init__()
+        self.scale = scale
+
+        # Stage 1: MSR-RCAN-large backbone + Deep Refine v2
+        self.backbone = MSRCAN(
+            in_channels=in_channels, out_channels=out_channels,
+            num_features=num_features, num_resgroups=num_resgroups,
+            num_resblocks=num_resblocks, reduction=reduction, scale=scale,
+        )
+        self.refine = DeepOutputRefineBlock(out_channels, mid_channels=32)
+
+        # Stage 2: Cascade Residual Correction
+        self.cascade = CascadeResidualCorrectionNet(
+            in_channels=out_channels,
+            mid_channels=cascade_mid_channels,
+            num_blocks=cascade_num_blocks,
+            residual_scale=cascade_residual_scale,
+        )
+
+    def forward(self, x):
+        sr_initial = self.backbone(x)
+        sr_stage1 = self.refine(sr_initial)
+        sr_final = self.cascade(sr_stage1)
+        return sr_final

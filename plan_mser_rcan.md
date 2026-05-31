@@ -79,3 +79,22 @@ mismatch. Soft supervision conflicts with HR hard supervision.
 Alpha=0.2 not pursued.
 
 **Best 50-epoch model remains**: MSR-RCAN-large-50-cosine (31.28 dB)
+
+## Phase 6: Global Context Block Ablation
+
+**Status**: COMPLETED - NOT EFFECTIVE
+
+**Setup**:
+- MSR-RCAN-large + GlobalContextRefineBlock (between backbone and Deep Refine v2)
+- GC Block: spatial attention mask + weighted context pooling + transform
+- GC refine params: 2,348 (very lightweight)
+
+**Results**:
+- GC-MSR-RCAN-large-50-cosine: 31.22 dB (-0.06 vs baseline 31.28)
+- RGB PSNR: 29.59 dB, SSIM: 0.7880
+
+**Conclusion**: Global Context Block did not improve performance.
+Spatial attention + global context pooling at image level does not provide
+useful information beyond local MSRCAB features for this task.
+
+**Best 50-epoch model remains**: MSR-RCAN-large-50-cosine (31.28 dB)

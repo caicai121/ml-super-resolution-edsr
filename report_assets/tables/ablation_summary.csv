@@ -1,0 +1,14 @@
+direction,model,y_psnr_y,delta_vs_baseline,result
+Multi-Scale RCAB,MS-RCAN-small,30.67,+0.07,effective
+Deep Refine v2,MSR-RCAN-small-v2,30.81,+0.14,effective
+Capacity 3g->5g,MSR-RCAN-mid-50,31.01,+0.20,effective
+Cosine LR,MSR-RCAN-mid-50-cosine,31.15,+0.14,effective
+Capacity 5g->8g,MSR-RCAN-large-50-cosine,31.28,+0.13,effective
+Extended training 50->100,MSR-RCAN-mid-100,31.44,+0.43,effective
+Data augmentation,MSR-RCAN-mid-50-cosine-aug,31.00,-0.01,ineffective
+Edge Branch,EG-MSR-RCAN,31.07,-0.08,ineffective
+Edge Loss,EG-MSR-RCAN+EdgeLoss,30.93,-0.22,ineffective
+AMSR adaptive fusion,AMSR-RCAN-mid,31.09,-0.06,ineffective
+RDRB dense refinement,RDR-MSR-RCAN-mid,31.12,-0.03,ineffective
+Teacher Distillation,Distill-a0.1,31.16,-0.12,ineffective
+Global Context Block,GC-MSR-RCAN-large,31.22,-0.06,ineffective
