@@ -1,7 +1,7 @@
 # 基于 RCAN 的遥感图像 ×4 超分辨率重建
 
-使用 RCAN（Residual Channel Attention Network）对 UC Merced Land Use 遥感场景图像进行 ×4 超分辨率重建，
-对比 Bicubic 插值基线与从零训练的 RCAN-small 模型，并以 Y 通道 PSNR/SSIM 作为标准评价指标。
+使用 RCAN（Residual Channel Attention Network）及变体对 UC Merced Land Use 遥感场景图像进行 ×4 超分辨率重建，
+通过系统性消融实验探索模块组合与训练策略，最终达到 Y+crop PSNR 31.40 dB。
 
 ## 数据集
 
@@ -41,45 +41,60 @@ Y+crop 是超分辨率领域的标准评价方式，排除边界插值误差，�
 
 ## 模型与结果
 
-### 总体指标（Test 集）
+### 总体指标（Test 集，UC Merced Selected 7 类）
 
-| 方法 | RGB PSNR | RGB SSIM | Y+crop PSNR | Y+crop SSIM |
-|------|----------|----------|-------------|-------------|
-| Bicubic ×4 | 27.41 | 0.7358 | 28.81 | 0.7675 |
-| **RCAN-small（从零训练）** | **29.00** | **0.7729** | **30.60** | **0.8060** |
-| vs Bicubic | +1.59 | +0.0371 | +1.79 | +0.0385 |
-| RCAN ×4 pretrained | 30.48 | 0.8166 | 32.08 | 0.8473 |
-| vs Bicubic | +3.07 | +0.0808 | +3.27 | +0.0798 |
+| 方法 | Y+crop PSNR | RGB PSNR | 参数量 | 说明 |
+|------|-------------|----------|--------|------|
+| Bicubic ×4 | 28.81 | 27.41 | — | 基线上采样 |
+| RCAN-small | 30.60 | 29.00 | 1.56M | 3g5b 从零训练 |
+| MSR-RCAN-mid | 31.15 | 29.54 | 5.37M | 5g5b + MSRCAB + Deep Refine + Cosine |
+| MSR-RCAN-large | 31.28 | 29.66 | 13.02M | 8g8b + MSRCAB + Deep Refine + Cosine |
+| **Cascade-10（最优 50e）** | **31.40** | **29.77** | **13.76M** | **Stage2 ResBlock ×10 + 残差级联** |
+| RCAN-pretrained | 32.08 | 30.48 | 15.59M | 公开预训练权重（参考） |
 
-- Bicubic 基线来自同一批图像的双三次插值上采样
-- RCAN ×4 pretrained 使用预训练权重，在 regular v2（5 类）上评测
+### Cascade 消融实验
 
-### 按类别 Y+crop PSNR（Test 集）
+| 模型 | Stage2 Blocks | 改动 | Y+crop PSNR | vs Baseline |
+|------|--------------|------|-------------|-------------|
+| MSR-RCAN-large (baseline) | 0 | — | 31.28 | — |
+| Cascade-6 | 6 | 基础残差级联 | 31.35 | +0.07 |
+| **Cascade-10** | **10** | **基础残差级联** | **31.40** | **+0.12** |
+| BP-Cascade | 6 | 反投影误差反馈 | 31.34 | +0.06 |
+| Gated-Cascade-10 | 10 | 空间门控 | 31.37 | +0.09 |
+| Learnable-Scale-10 | 10 | 可学习残差缩放 (α=0.1048) | 31.39 | +0.11 |
 
-| 类别 | Bicubic | RCAN-small | Gain |
-|------|---------|------------|------|
-| beach | 35.74 | 36.28 | +0.53 |
-| golfcourse | 32.16 | 32.90 | +0.73 |
-| baseballdiamond | 31.35 | 32.15 | +0.80 |
-| runway | 28.21 | 29.67 | +1.47 |
-| tenniscourt | 27.07 | 27.79 | +0.72 |
-| freeway | 26.97 | 27.75 | +0.78 |
-| airplane | 26.76 | 27.67 | +0.91 |
+**结论**：Cascade 残差级联有效（+0.12 dB），但额外引入反投影误差、空间门控或可学习残差缩放均未超越 Cascade-10。
 
-runway 类增益最大（+1.47 dB），说明 RCAN-small 对规则线性结构的恢复能力明显优于 Bicubic。
+### 无效消融实验
 
-## RCAN-small 模型参数
+| 实验方向 | 结果 | 结论 |
+|----------|------|------|
+| Teacher Distillation (α=0.1) | 31.16 dB (-0.12) | 师生结构分布不匹配 |
+| Global Context Block | 31.22 dB (-0.06) | 空间注意力无额外收益 |
+| Edge Branch + Edge Loss | 31.22 dB (-0.06) | 边缘监督干扰主任务 |
+| AMSRCAB 多尺度注意力 | 31.22 dB (-0.06) | 与 MSRCAB 功能重叠 |
+| RDRB 递归残差 | 31.25 dB (-0.03) | 容量不足 |
 
-| 参数 | 值 |
-|------|----|
-| num_features | 64 |
-| num_resgroups | 3 |
-| num_resblocks | 5 |
-| reduction | 16 |
-| 总参数量 | ~1M |
-| 训练轮数 | 50 |
-| 最佳 checkpoint | epoch 49 |
-| val Y+crop PSNR | 30.12 dB |
+### 消融小结
+
+```
+Bicubic (28.81) → RCAN-small (30.60, +1.79)
+                → MSR-RCAN-mid (31.15, +0.55)
+                → MSR-RCAN-large (31.28, +0.13)
+                → Cascade-10 (31.40, +0.12) ★ 最优 50e
+```
+
+有效改进路径：多尺度特征提取 (MSRCAB) → 深度精炼 (Deep Refine) → 余弦退火 → 残差级联修正。
+
+## 最优模型
+
+**Cascade-MSR-RCAN-large Stage2-10**
+
+- 主干：MSR-RCAN-large (8g8b, MSRCAB, Deep Refine v2)
+- Stage2：Cascade Residual Correction Network (10 × BasicResidualBlock)
+- 残差缩放：0.1
+- 训练：50 epochs, Adam (lr=2e-4), CosineAnnealingLR, L1 Loss
+- Y+crop PSNR：31.40 dB | RGB PSNR：29.77 dB
 
 ## 目录结构
 
@@ -89,12 +104,12 @@ runway 类增益最大（+1.47 dB），说明 RCAN-small 对规则线性结构�
 ├── configs/             # 实验配置文件
 ├── scripts/             # 数据处理与评测脚本
 ├── data_final/          # 最终数据集（不入库）
-├── data_experiments/    # 其他实验数据（不入库）
 ├── results/             # 评测结果（不入库）
 ├── report_assets/       # 报告用图表（入库）
 │   ├── figures/         # 对比图
 │   └── tables/          # 指标表格
 ├── checkpoints/         # 模型权重（不入库）
+├── plan_mser_rcan.md    # 实验计划与记录
 └── README.md
 ```
 
@@ -107,14 +122,9 @@ runway 类增益最大（+1.47 dB），说明 RCAN-small 对规则线性结构�
 ## 快速复现
 
 ```bash
-# RCAN-small 推理（使用最佳 checkpoint）
-/root/miniconda3/bin/python scripts/test_rcan_small.py
+# Cascade-10 推理（使用最佳 checkpoint）
+/root/miniconda3/bin/python test.py --config configs/cascade_msr_rcan_large_s10_50_cosine_x4_ucmerced_selected.yaml
 
 # Bicubic ×4 baseline
 /root/miniconda3/bin/python scripts/test_ucmerced_regular_bicubic.py
 ```
-
-## 后续计划
-
-计划引入 MSER-RCAN（多尺度增强残差通道注意力网络），在 RCAN 基础上改进特征提取能力，
-进一步提升遥感场景的超分辨率重建质量。
