@@ -42,3 +42,40 @@
 **Goal**: Replace 5x5 branch with 3x3 dilation=2 in MSRCAB for larger receptive field with fewer parameters.
 **Keep**: Deep Refine v2 unchanged.
 **Expected improvement**: Push Y+crop PSNR toward 30.90~31.00 dB.
+
+## Phase 4: Capacity & Training Strategy Experiments
+
+**Status**: COMPLETED
+
+Scaling and training strategy experiments (full results in memory):
+- MSR-RCAN-mid-50 (5g5b): 31.01 dB
+- MSR-RCAN-mid-50-cosine (Cosine LR): 31.15 dB (+0.14)
+- MSR-RCAN-large-50-cosine (8g8b): 31.28 dB (+0.13)
+- MSR-RCAN-mid-100 (extended training): 31.44 dB
+
+**Effective**: Cosine LR, larger capacity, more epochs
+**Ineffective**: data augmentation, Edge Branch/Loss, AMSRCAB, RDRB
+
+**Current 50-epoch best**: MSR-RCAN-large-50-cosine (31.28 dB, 13.02M params)
+
+## Phase 5: Teacher Distillation Ablation
+
+**Status**: COMPLETED - NOT EFFECTIVE
+
+**Setup**:
+- Teacher: RCAN-pretrained (Y+crop 32.52 dB)
+- Student: MSR-RCAN-large-50-cosine (Y+crop 31.28 dB)
+- Loss: L_total = L1(SR_student, HR) + 0.1 * L1(SR_student, SR_teacher)
+- Teacher frozen, not trained
+
+**Results**:
+- Distill alpha=0.1: 31.16 dB (-0.12 vs baseline 31.28)
+- Training best (val): 30.75 dB at epoch 48
+
+**Conclusion**: Direct L1 distillation on final SR output did not improve student
+performance. Teacher (standard RCAN 10g20b) and student (MSRRCANV2 8g8b +
+MSRCAB + Deep Refine) have structural differences leading to distribution
+mismatch. Soft supervision conflicts with HR hard supervision.
+Alpha=0.2 not pursued.
+
+**Best 50-epoch model remains**: MSR-RCAN-large-50-cosine (31.28 dB)

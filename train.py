@@ -1,5 +1,13 @@
 #!/usr/bin/env python3
-"""Training script for super-resolution models (SRCNN, Light-EDSR, RCAN)."""
+"""Training script for super-resolution models (SRCNN, Light-EDSR, RCAN).
+
+Supports optional teacher distillation via config:
+  distillation:
+    enabled: true
+    teacher_model: rcan_pretrained
+    teacher_checkpoint: checkpoints/rcan_x4/pretrained_rcan_x4.pth
+    alpha: 0.1
+"""
 
 import argparse
 import csv
@@ -212,13 +220,50 @@ def build_model(cfg):
         input_key = "lr"
         ckpt_name = "best_msr_rcan_large50_cosine_x4.pth"
         last_name = "last_msr_rcan_large50_cosine_x4.pth"
-
-
-
     else:
         raise ValueError(f"Unknown model: {model_name}")
 
     return model, input_key, ckpt_name, last_name
+
+
+def load_teacher(cfg, device):
+    """Load frozen teacher model for distillation.
+
+    Teacher uses standard RCAN architecture with pretrained weights.
+    Both teacher and student use [0,1] float input (no sub_mean/add_mean).
+    """
+    distill_cfg = cfg.get("distillation", {})
+    if not distill_cfg.get("enabled", False):
+        return None, None
+
+    teacher_type = distill_cfg.get("teacher_model", "rcan_pretrained")
+    teacher_ckpt = distill_cfg.get("teacher_checkpoint")
+    alpha = distill_cfg.get("alpha", 0.1)
+
+    if teacher_type == "rcan_pretrained":
+        teacher = RCAN(
+            in_channels=3, out_channels=3,
+            num_features=64,
+            num_resgroups=10, num_resblocks=20,
+            reduction=16, scale=cfg["scale"],
+        )
+        from models.rcan import load_pretrained_rcan
+        teacher = load_pretrained_rcan(teacher_ckpt, teacher, device)
+    else:
+        raise ValueError(f"Unknown teacher model: {teacher_type}")
+
+    teacher = teacher.to(device)
+    teacher.eval()
+    for p in teacher.parameters():
+        p.requires_grad = False
+
+    teacher_params = sum(p.numel() for p in teacher.parameters())
+    print(f"Teacher loaded: {teacher_type} ({teacher_params:,} params)")
+    print(f"  Checkpoint: {teacher_ckpt}")
+    print(f"  Frozen: {all(not p.requires_grad for p in teacher.parameters())}")
+    print(f"  Distillation alpha: {alpha}")
+
+    return teacher, alpha
 
 
 def validate(model, val_loader, device, input_key, scale):
@@ -308,6 +353,10 @@ def main():
     print(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")
     print(f"Input key: {input_key}")
 
+    # Teacher (for distillation)
+    teacher, distill_alpha = load_teacher(cfg, device)
+    distill_enabled = teacher is not None
+
     # Loss and optimizer
     criterion = nn.L1Loss()
 
@@ -347,6 +396,7 @@ def main():
         model.train()
         epoch_loss = 0.0
         epoch_l1_loss = 0.0
+        epoch_distill_loss = 0.0
         epoch_edge_loss = 0.0
         num_batches = 0
 
@@ -355,48 +405,82 @@ def main():
             hr = batch["hr"].to(device)
 
             if first_batch:
-                print(f"\n[Shape Check - Epoch {epoch}, Batch 1]")
+                print(f"\n[Dry-run - Epoch {epoch}, Batch 1]")
                 if "lr" in batch:
-                    print(f"  lr shape:    {batch['lr'].shape}")
-                print(f"  input shape: {inp.shape}")
-                print(f"  hr shape:    {hr.shape}")
-                first_batch = False
+                    print(f"  LR shape:       {batch['lr'].shape}")
+                    print(f"  LR range:       [{batch['lr'].min():.4f}, {batch['lr'].max():.4f}]")
+                print(f"  Input shape:    {inp.shape}")
+                print(f"  HR shape:       {hr.shape}")
+                print(f"  HR range:       [{hr.min():.4f}, {hr.max():.4f}]")
 
             sr = model(inp)
 
-            if num_batches == 0 and epoch == 1:
-                print(f"  sr shape:    {sr.shape}")
+            if first_batch:
+                print(f"  SR shape:       {sr.shape}")
+                print(f"  SR range:       [{sr.min():.4f}, {sr.max():.4f}]")
 
             l1_loss = criterion(sr, hr)
+
+            # Distillation loss
+            if distill_enabled:
+                with torch.no_grad():
+                    sr_teacher = teacher(inp)
+                if first_batch:
+                    print(f"  SR_teacher shape: {sr_teacher.shape}")
+                    print(f"  SR_teacher range: [{sr_teacher.min():.4f}, {sr_teacher.max():.4f}]")
+                    print(f"  Teacher eval:     {not teacher.training}")
+                    print(f"  Teacher no_grad:  {all(not p.requires_grad for p in teacher.parameters())}")
+                distill_loss = criterion(sr, sr_teacher)
+                loss = l1_loss + distill_alpha * distill_loss
+                if first_batch:
+                    print(f"  L1 loss:        {l1_loss.item():.6f}")
+                    print(f"  Distill loss:   {distill_loss.item():.6f}")
+                    print(f"  Total loss:     {loss.item():.6f}")
+                    print(f"  GPU memory:     {torch.cuda.memory_allocated() / 1024**2:.1f} MB")
+            else:
+                distill_loss = torch.tensor(0.0)
+                loss = l1_loss
+
             if edge_criterion is not None:
                 e_loss = edge_criterion(sr, hr)
-                loss = l1_loss + edge_lambda * e_loss
-            else:
-                loss = l1_loss
+                loss = loss + edge_lambda * e_loss
+
+            if first_batch:
+                first_batch = False
 
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
 
             epoch_loss += loss.item()
+            epoch_l1_loss += l1_loss.item()
+            if distill_enabled:
+                epoch_distill_loss += distill_loss.item()
             if edge_criterion is not None:
-                epoch_l1_loss += l1_loss.item()
                 epoch_edge_loss += e_loss.item()
             num_batches += 1
 
         avg_loss = epoch_loss / num_batches
-        avg_l1 = epoch_l1_loss / num_batches if edge_criterion else avg_loss
-        avg_edge = epoch_edge_loss / num_batches if edge_criterion else 0.0
+        avg_l1 = epoch_l1_loss / num_batches
+        avg_distill = epoch_distill_loss / num_batches if distill_enabled else 0.0
         train_losses.append(avg_loss)
 
         # Validation - both RGB and Y+crop
         val_m = validate(model, val_loader, device, input_key, scale)
         val_metrics_history.append(val_m)
 
-        print(f"Epoch [{epoch}/{epochs}] Loss: {avg_loss:.6f} | "
-              f"RGB: {val_m['rgb_psnr']:.2f}/{val_m['rgb_ssim']:.4f} | "
-              f"Y+crop: {val_m['y_psnr']:.2f}/{val_m['y_ssim']:.4f} | "
-              f"Best Y: {best_y_psnr:.2f}")
+        if distill_enabled:
+            print(f"Epoch [{epoch}/{epochs}] "
+                  f"Total: {avg_loss:.6f} | L1: {avg_l1:.6f} | Distill: {avg_distill:.6f} | "
+                  f"RGB: {val_m['rgb_psnr']:.2f}/{val_m['rgb_ssim']:.4f} | "
+                  f"Y+crop: {val_m['y_psnr']:.2f}/{val_m['y_ssim']:.4f} | "
+                  f"Best Y: {best_y_psnr:.2f} | "
+                  f"LR: {optimizer.param_groups[0]['lr']:.2e}")
+        else:
+            print(f"Epoch [{epoch}/{epochs}] Loss: {avg_loss:.6f} | "
+                  f"RGB: {val_m['rgb_psnr']:.2f}/{val_m['rgb_ssim']:.4f} | "
+                  f"Y+crop: {val_m['y_psnr']:.2f}/{val_m['y_ssim']:.4f} | "
+                  f"Best Y: {best_y_psnr:.2f}")
 
         # Save best (by Y+crop PSNR)
         if val_m["y_psnr"] > best_y_psnr:
@@ -410,8 +494,8 @@ def main():
                 "y_psnr": val_m["y_psnr"],
                 "y_ssim": val_m["y_ssim"],
                 "loss": avg_loss,
-                "l1_loss": avg_l1 if edge_criterion else avg_loss,
-                "edge_loss": avg_edge if edge_criterion else 0.0,
+                "l1_loss": avg_l1,
+                "distill_loss": avg_distill if distill_enabled else 0.0,
                 "model_name": model_name,
             }, save_dir / ckpt_name)
             print(f"  -> New best model saved (Y+crop PSNR: {best_y_psnr:.2f})")
@@ -437,14 +521,24 @@ def main():
     log_path = eval_dir / "train_log.csv"
     with open(log_path, "w", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(["epoch", "train_loss",
-                         "val_rgb_psnr", "val_rgb_ssim",
-                         "val_y_psnr", "val_y_ssim"])
+        if distill_enabled:
+            writer.writerow(["epoch", "train_loss", "train_l1", "train_distill",
+                             "val_rgb_psnr", "val_rgb_ssim",
+                             "val_y_psnr", "val_y_ssim"])
+        else:
+            writer.writerow(["epoch", "train_loss",
+                             "val_rgb_psnr", "val_rgb_ssim",
+                             "val_y_psnr", "val_y_ssim"])
         for i in range(epochs):
             m = val_metrics_history[i]
-            writer.writerow([i + 1, train_losses[i],
-                             m["rgb_psnr"], m["rgb_ssim"],
-                             m["y_psnr"], m["y_ssim"]])
+            if distill_enabled:
+                writer.writerow([i + 1, train_losses[i],
+                                 m["rgb_psnr"], m["rgb_ssim"],
+                                 m["y_psnr"], m["y_ssim"]])
+            else:
+                writer.writerow([i + 1, train_losses[i],
+                                 m["rgb_psnr"], m["rgb_ssim"],
+                                 m["y_psnr"], m["y_ssim"]])
 
     # Save loss curve
     plot_loss_curve(train_losses,

@@ -1,0 +1,27 @@
+MSR-RCAN-large-50-cosine-distill-a0.1 Teacher Distillation Ablation
+======================================================================
+
+Teacher: RCAN-pretrained (Y+crop 32.52 dB)
+Student: MSR-RCAN-large 8g8b (Y+crop 31.28 dB)
+Alpha: 0.1
+Loss: L_total = L1(SR_student, HR) + 0.1 * L1(SR_student, SR_teacher)
+
+Training: 50 epochs, best at epoch 48
+Best Val Y+crop PSNR: 30.75 dB
+
+Test Results (70 images):
+  RGB PSNR:  29.54 dB | RGB SSIM:  0.7858
+  Y+crop PSNR: 31.16 dB | Y+crop SSIM: 0.8181
+
+Comparison:
+  MSR-RCAN-large-50-cosine (baseline):  31.28 dB
+  Distill alpha=0.1:                     31.16 dB  (-0.12 dB)
+  RCAN-pretrained (teacher):             32.52 dB
+
+Conclusion: Teacher distillation INEFFECTIVE.
+Direct L1 distillation on final SR output did not improve student performance.
+Teacher (standard RCAN 10g20b) and student (MSRRCANV2 8g8b + MSRCAB + Deep Refine)
+have structural differences leading to distribution mismatch.
+Soft supervision conflicts with HR hard supervision.
+Not pursuing alpha=0.2.
+Best 50-epoch model remains MSR-RCAN-large-50-cosine at 31.28 dB.

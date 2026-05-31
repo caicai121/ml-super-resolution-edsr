@@ -1,0 +1,8 @@
+model,rgb_psnr,rgb_ssim,y_psnr_y,y_ssim,params_m,epochs,notes
+Bicubic x4,28.04,,29.75,,,,
+RCAN-small,29.04,,30.60,,1.56,50,3g5b
+MSR-RCAN-mid-50-cosine,29.54,,31.15,,5.37,50,5g5b+MSRCAB+Deep Refine+Cosine LR
+MSR-RCAN-large-50-cosine,29.66,,31.28,,13.02,50,8g8b+MSRCAB+Deep Refine+Cosine LR
+MSR-RCAN-large-50-cosine-distill-a0.1,29.54,0.7858,31.16,0.8181,13.02,50,teacher distillation alpha=0.1 (INEFFECTIVE)
+MSR-RCAN-mid-100,,,"31.44",,5.37,100,5g5b extended training
+RCAN-pretrained (teacher),30.48,,32.52,,15.59,,public pretrained weights
