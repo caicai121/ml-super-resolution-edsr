@@ -88,6 +88,39 @@ Bicubic (28.81) → RCAN-small (30.60, +1.79)
 
 有效改进路径：多尺度特征提取 (MSRCAB) → 深度精炼 (Deep Refine) → 余弦退火 → 残差级联修正。
 
+## 补充实验：×2 超分辨率
+
+为验证模型在不同放大倍率下的泛化能力，在相同数据集上进行了 ×2 超分辨率补充实验。
+×2 信息丢失更少（4× 像素压缩 vs ×4 的 16×），PSNR 应显著高于 ×4。
+
+### 实验设置
+
+- 模型：Cascade-MSR-RCAN-large Stage2-10（结构与 ×4 最优模型一致）
+- 唯一变化：scale=2, crop_border=2
+- LR_x2 数据：Bicubic 下采样 256×256 → 128×128
+- train/val/test：560/70/70（与 ×4 数据集划分相同）
+- 训练：50 epochs, Adam (lr=2e-4), CosineAnnealingLR, L1 Loss
+
+### ×2 测试结果
+
+| 方法 | Scale | RGB PSNR | RGB SSIM | Y+crop PSNR | Y+crop SSIM | 参数量 | 说明 |
+|------|-------|----------|----------|-------------|-------------|--------|------|
+| Bicubic ×2 | 2 | 33.26 | 0.9028 | 34.80 | 0.9176 | — | 基线上采样 |
+| **Cascade-10 ×2** | **2** | **35.37** | **0.9331** | **37.29** | **0.9457** | **13.76M** | **Stage2 ResBlock ×10** |
+
+### ×2 vs ×4 对比
+
+| 模型 | Scale | Y+crop PSNR | Δ vs ×4 |
+|------|-------|-------------|----------|
+| Bicubic | ×4 | 29.75 | — |
+| Bicubic | ×2 | 34.80 | +5.05 |
+| Cascade-10 (主线) | ×4 | 31.40 | — |
+| Cascade-10 (补充) | ×2 | 37.29 | +5.89 |
+
+**结论**：Cascade-MSR-RCAN 在 ×2 任务上 Y+crop PSNR 达到 37.29 dB，比 ×4 提升 5.89 dB，
+验证了 Cascade 残差级联结构在不同放大倍率下的多尺度适应能力。
+×2 作为补充实验，说明模型在较低放大倍率下可达到更高重建质量。
+
 ## 最优模型
 
 **Cascade-MSR-RCAN-large Stage2-10**
@@ -126,6 +159,9 @@ Bicubic (28.81) → RCAN-small (30.60, +1.79)
 ```bash
 # Cascade-10 推理（使用最佳 checkpoint）
 /root/miniconda3/bin/python test.py --config configs/cascade_msr_rcan_large_s10_50_cosine_x4_ucmerced_selected.yaml
+
+# Cascade-10 ×2 推理（补充实验）
+/root/miniconda3/bin/python test.py --config configs/cascade_msr_rcan_large_s10_50_cosine_x2_ucmerced_selected.yaml
 
 # Bicubic ×4 baseline
 /root/miniconda3/bin/python scripts/test_ucmerced_regular_bicubic.py
