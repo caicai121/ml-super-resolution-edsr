@@ -1,0 +1,33 @@
+# RCAN-small x2 training on UC Merced selected 7 classes
+model: rcan_small
+scale: 2
+
+model_params:
+  in_channels: 3
+  out_channels: 3
+  num_features: 64
+  num_resgroups: 3
+  num_resblocks: 5
+  reduction: 16
+
+data:
+  train_hr: data_final/ucmerced_selected/train/HR
+  train_lr: data_final/ucmerced_selected/train/LR_x2
+  val_hr: data_final/ucmerced_selected/val/HR
+  val_lr: data_final/ucmerced_selected/val/LR_x2
+  test_hr: data_final/ucmerced_selected/test/HR
+  test_lr: data_final/ucmerced_selected/test/LR_x2
+
+train:
+  epochs: 50
+  batch_size: 8
+  patch_size: 128
+  lr: 1.0e-4
+  num_workers: 4
+  save_dir: checkpoints/rcan_small_x2
+
+eval:
+  save_dir: results/rcan_small_x2
+  compare_dir: results/rcan_small_x2/comparisons
+  crop_border: 2
+  test_y_channel: true

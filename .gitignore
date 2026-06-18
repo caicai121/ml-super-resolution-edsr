@@ -41,3 +41,12 @@ desktop.ini
 # ===== Jupyter =====
 *.ipynb_checkpoints
 data_experiments
+
+# ===== Report assets (separate repo) =====
+report_assets/
+
+# ===== Training logs =====
+*.log
+
+# ===== Large generated data =====
+data_final/
